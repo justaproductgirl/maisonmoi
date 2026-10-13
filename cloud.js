@@ -4,7 +4,7 @@
 const CLOUD_URL = 'https://mkfiiqkbtqbjksdzzykv.supabase.co';
 const CLOUD_KEY = 'sb_publishable_kcy8Iqb5nZk7s1Gb13ZsWA_CCqKgFdM'; // publishable: safe in public code, row level security guards the data
 const PHOTO_BUCKET = 'closet-photos';
-const DEVICE_ONLY = ['items', 'tab', 'weather', 'cloudUser', 'cloudRev', '_unsynced', 'localOnly']; // never copied into closet_state
+const DEVICE_ONLY = ['items', 'tab', 'weather', 'cloudUser', 'cloudRev', '_unsynced', 'localOnly', 'sub']; // never copied into closet_state
 const CLOUD = {db:null, user:null, checked:false, busy:false, again:false, t:0, retry:0, status:'', at:0, msg:'',
   sent:{items:{}, state:'', profile:''}, signed:{}};
 
@@ -13,6 +13,8 @@ const cloudGate = () => cloudOn() && !CLOUD.user && !S.localOnly;          // sh
 const cloudImg = v => typeof v === 'string' && v.startsWith('sb:') ? (CLOUD.signed[v.slice(3)] || '') : v;
 const cloudWrite = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){} };
 const chunks = (a, n) => Array.from({length:Math.ceil(a.length / n)}, (_, i) => a.slice(i * n, i * n + n));
+// Plus is on while Stripe says trialing or active ('comped' is a free pass set by hand). The webhook is the only writer of this table.
+const isPlus = () => !!(CLOUD.user || (!CLOUD.checked && S.cloudUser)) && ['trialing', 'active', 'comped'].includes((S.sub || {}).status);
 const newRev = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 async function cloudStart(){
@@ -63,7 +65,7 @@ async function cloudPull(){
       cloudWrite();
       if (window.CLOSET_CATALOG && S.profile && S.profile.done && mergeCatalog()) save(); // pieces Claude added to catalog.js on this Mac
     }
-    await signPhotos();
+    await Promise.all([signPhotos(), loadPlan()]);
     CLOUD.status = 'saved'; CLOUD.at = Date.now();
     if (!S.plan || S.plan.date !== S.day.date) generatePlan();
   } catch(e){
@@ -72,6 +74,29 @@ async function cloudPull(){
   }
   render();
 }
+
+/* ---- Plan: read your subscription, open Stripe Checkout or the billing portal ---- */
+async function loadPlan(){
+  const {data, error} = await CLOUD.db.from('subscriptions').select('status,trial_end,current_period_end,cancel_at_period_end').eq('user_id', CLOUD.user.id).maybeSingle();
+  if (!error){ S.sub = data || {status:'free'}; cloudWrite(); } // on a network hiccup, keep the last known plan
+}
+function planInfo(){
+  const s = S.sub || {}, day = d => d ? new Date(d).toLocaleDateString([], {month:'long', day:'numeric'}) : '';
+  if (s.status === 'comped') return {label:"You have a founder's pass: Plus, on the house, for good.", manage:false};
+  if (s.status === 'trialing') return {label:`You're on your free trial of Plus${s.trial_end ? ` until ${day(s.trial_end)}` : ''}${s.cancel_at_period_end ? ', and it won\'t renew' : `, then $${PLUS.price} a month`}.`, manage:true};
+  if (s.status === 'active') return {label:s.cancel_at_period_end ? `You're on Plus until ${day(s.current_period_end)}. It won't renew.` : `You're on Plus. Next bill ${day(s.current_period_end)}.`, manage:true};
+  return {label:"You're on Free.", manage:false};
+}
+async function billing(fn){
+  if (!CLOUD.user){ toast('Sign in first'); return; }
+  try {
+    const {data, error} = await CLOUD.db.functions.invoke(fn, {body:{return_url:location.href.split('#')[0]}});
+    if (error || !data || !data.url) throw error || new Error('no url');
+    location.href = data.url;
+  } catch(e){ toast("Checkout isn't connected yet. Stripe is the next step."); }
+}
+const cloudCheckout = () => billing('create-checkout');
+const cloudPortal = () => billing('customer-portal');
 
 /* ---- Push: save changes to your account. Only items that changed are sent. ---- */
 function cloudQueue(){

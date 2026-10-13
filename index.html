@@ -501,6 +501,20 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 .theme-tile .tt-ck{position:absolute;top:7px;right:9px;color:var(--head-ink);font-weight:700;display:none}
 .theme-tile.on{outline:3px solid var(--ink);outline-offset:2px}
 .theme-tile.on .tt-ck{display:block}
+.theme-tile.locked .tt-ck{display:block;font-weight:400}
+/* Maison Moi Plus: upgrade page and plan meters */
+.up-card{padding:22px;margin-top:20px}
+.up-hero{display:grid;grid-template-columns:1.3fr 1fr;gap:24px;align-items:center;padding:30px}
+.up-price{font-size:46px;font-weight:800;line-height:1}.up-price span{font-size:16px;font-weight:500;color:var(--muted)}
+.up-eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.up-table{width:100%;border-collapse:collapse;margin-top:6px}
+.up-table th,.up-table td{padding:12px 10px;border-bottom:var(--edge);text-align:left;font-size:14px}
+.up-table th{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:500}
+.up-table td:not(:first-child),.up-table th:not(:first-child){text-align:center;width:28%}
+.up-table .plus{font-weight:700}
+.meter{height:6px;background:var(--line, #e5e5e5);border-radius:3px;overflow:hidden;margin:6px 0 2px}.meter i{display:block;height:100%;background:var(--ink)}
+.up-faq{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
+@media (max-width:760px){.up-hero{grid-template-columns:1fr}}
 .au-msg{min-height:18px;margin-top:10px;font-size:13px}
 .au-msg.ok{color:var(--muted)}.au-msg.bad{color:#b8343b}
 </style>
@@ -802,7 +816,7 @@ function eventsFor(date){
 
 /* ============ Views ============ */
 function render(){
-  document.documentElement.dataset.theme = S.theme || 'lbd';
+  document.documentElement.dataset.theme = themeOn();
   if (cloudGate()){ document.body.classList.add('setup'); $('#view').innerHTML = viewAuth(); return; }
   const setup = !(S.profile && S.profile.done) || !!UI.editProfile;
   document.body.classList.toggle('setup', setup);
@@ -816,7 +830,7 @@ function render(){
   });
   const sellCount = S.items.length ? resellList().filter(x => x.i.status === 'keep').length : 0;
   $('.tab[data-tab="resale"]').innerHTML = 'Resell' + (sellCount ? `<span class="count">${sellCount}</span>` : '');
-  $('#view').innerHTML = ({today:viewToday, build:viewBuild, closet:viewCloset, library:viewLibrary, resale:viewResale, inspo:viewInspo, laundry:viewLaundry, profile:viewProfile, shop:viewShop})[t]();
+  $('#view').innerHTML = ({today:viewToday, build:viewBuild, closet:viewCloset, library:viewLibrary, resale:viewResale, inspo:viewInspo, laundry:viewLaundry, profile:viewProfile, shop:viewShop, upgrade:viewUpgrade})[t]();
   if (t === 'shop') loadShopPicks();
   if (t === 'inspo') buildPinterest();
 }
@@ -882,6 +896,60 @@ async function finishSetup(btn){
   toast(loc ? `Welcome, ${name}! Forecast for ${loc.city} is loaded.` : `Welcome, ${name}! Couldn't find that zip, so set the weather manually.`);
 }
 
+/* ---- Plans: Free and Maison Moi Plus ---- */
+const FREE = {items:15, restyles:2, theme:'lbd'};
+const PLUS = {price:8, trialDays:7};
+const realItems = () => S.items.filter(i => !i.demo).length;
+const themeOn = () => isPlus() || !S.theme ? (S.theme || 'lbd') : FREE.theme;
+const restylesLeft = () => isPlus() ? Infinity : FREE.restyles - (S.restyles && S.restyles.date === todayISO() ? S.restyles.n : 0);
+function canAdd(n = 1){
+  if (isPlus() || realItems() + n <= FREE.items) return true;
+  upsell('items'); return false;
+}
+function useRestyle(){
+  if (restylesLeft() <= 0){ upsell('restyles'); return false; }
+  if (!isPlus()) S.restyles = {date:todayISO(), n:FREE.restyles - restylesLeft() + 1};
+  return true;
+}
+function upsell(why){ UI.upsell = why; closeModal(); S.tab = 'upgrade'; save(); render(); window.scrollTo(0, 0); }
+function planCard(){
+  const sub = planInfo(), used = realItems(), left = restylesLeft();
+  if (isPlus()) return `<div class="card"><h2>Plan</h2><p class="muted small sub">${sub.label}</p>
+    <div class="actions"><button class="btn sm" data-action="tab" data-tab="upgrade">See your plan</button>${sub.manage ? '<button class="btn sm" data-action="manage-sub">Manage subscription</button>' : ''}</div></div>`;
+  return `<div class="card"><h2>Plan</h2><p class="muted small sub">You're on Free. Plus unlocks your whole closet, unlimited restyles and every theme.</p>
+    <div class="small"><b>${Math.min(used, FREE.items)} of ${FREE.items}</b> closet pieces</div><div class="meter"><i style="width:${Math.min(100, used / FREE.items * 100)}%"></i></div>
+    <div class="small" style="margin-top:8px"><b>${Math.max(0, left)} of ${FREE.restyles}</b> restyles left today</div>
+    <button class="btn primary" style="margin-top:14px" data-action="tab" data-tab="upgrade">Try Plus free for ${PLUS.trialDays} days</button></div>`;
+}
+function viewUpgrade(){
+  const plus = isPlus(), sub = planInfo(), why = UI.upsell; UI.upsell = null;
+  const reason = {items:`Your Free closet holds ${FREE.items} pieces, and it's full. Plus makes room for everything you own.`,
+    restyles:`You've used both of today's restyles. They reset tomorrow, or go unlimited with Plus.`,
+    theme:`That theme is part of Plus. Free comes dressed in Little Black Dress.`}[why];
+  const cta = plus ? (sub.manage ? '<button class="btn primary" data-action="manage-sub">Manage subscription</button>' : '')
+    : CLOUD.user ? `<button class="btn primary" data-action="start-trial">Start your ${PLUS.trialDays}-day free trial</button>`
+    : '<button class="btn primary" data-action="auth-signin">Sign in to start your free trial</button>';
+  const rows = [['Closet pieces', FREE.items, 'Unlimited'], ['Outfit restyles', FREE.restyles + ' a day', 'Unlimited'], ['Themes', 'Little Black Dress', `All ${Object.keys(THEMES).length}`],
+    ['Daily outfit with your forecast', '✓', '✓'], ['Laundry, Resell and Library', '✓', '✓'], ['Sync across your devices', '✓', '✓']];
+  return `<button class="crumb" data-action="tab" data-tab="profile">← Profile</button>
+  ${reason ? `<div class="banner"><span>✦ ${reason}</span></div>` : ''}
+  <div class="card up-hero">
+    <div><div class="up-eyebrow">Maison Moi Plus</div><h1 style="margin:8px 0 10px">Your whole closet, styled every single day.</h1>
+      <p class="muted">${plus ? sub.label : `Bring every piece you own, restyle as often as you like and dress the app in any theme. Try it free for ${PLUS.trialDays} days, then $${PLUS.price} a month. Cancel anytime.`}</p>
+      <div class="actions" style="margin-top:16px">${cta}</div></div>
+    <div><div class="up-price">$${PLUS.price}<span> / month</span></div><p class="small muted" style="margin-top:8px">${PLUS.trialDays} days free · cancel anytime in two taps</p>
+      ${plus ? '' : `<div class="small" style="margin-top:16px">You're using <b>${Math.min(realItems(), FREE.items)} of ${FREE.items}</b> pieces</div><div class="meter"><i style="width:${Math.min(100, realItems() / FREE.items * 100)}%"></i></div>`}</div>
+  </div>
+  <div class="card up-card"><h2>Free vs Plus</h2>
+    <table class="up-table"><thead><tr><th></th><th>Free</th><th>Plus</th></tr></thead>
+    <tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="plus">${r[2]}</td></tr>`).join('')}</tbody></table></div>
+  <div class="card up-card"><h2>Good to know</h2><div class="up-faq">
+    <div><b>What happens after the trial?</b><p class="small muted">You're billed $${PLUS.price} a month starting day ${PLUS.trialDays + 1}. We'll email you before the trial ends.</p></div>
+    <div><b>What if I cancel?</b><p class="small muted">Nothing is deleted. Your pieces, photos and history stay put; you just can't add past ${FREE.items} pieces and the app goes back to Little Black Dress.</p></div>
+    <div><b>How do I pay?</b><p class="small muted">Securely through Stripe. Maison Moi never sees or stores your card.</p></div>
+  </div></div>`;
+}
+
 /* ---- Profile tab ---- */
 const THEMES = {
   lbd:{name:'Little Black Dress', sub:'Gallery white and ink black. The original, never out of style.', by:'Maison Moi classic', sw:['#f2f2f0','#0b0b0b','#ffffff','#9a9a9a']},
@@ -907,9 +975,9 @@ function viewProfile(){
         <button class="btn primary" style="margin-top:12px" data-action="save-about">Save</button>
       </div>
       <div class="card">
-        <h2>Theme</h2><p class="muted small sub">Dress up the whole app. Tap one to try it on.</p>
-        <div class="themes">${Object.entries(THEMES).map(([k, th]) => `<button class="theme-tile ${(S.theme || 'lbd') === k ? 'on' : ''}" data-theme="${k}" data-action="set-theme" data-v="${k}">
-          <div class="tt-bar">${th.name}</div><span class="tt-ck">✓</span>
+        <h2>Theme</h2><p class="muted small sub">Dress up the whole app. Tap one to try it on.${isPlus() ? '' : ' Free includes Little Black Dress; the rest come with Plus.'}</p>
+        <div class="themes">${Object.entries(THEMES).map(([k, th]) => `<button class="theme-tile ${themeOn() === k ? 'on' : ''} ${isPlus() || k === FREE.theme ? '' : 'locked'}" data-theme="${k}" data-action="set-theme" data-v="${k}">
+          <div class="tt-bar">${th.name}</div><span class="tt-ck">${isPlus() || k === FREE.theme ? '✓' : '🔒 Plus'}</span>
           <div class="tt-body"><div class="tt-sw">${th.sw.map(c => `<i style="background:${c}"></i>`).join('')}</div><div class="small">${th.sub}</div><div class="tt-by">${th.by}</div></div></button>`).join('')}</div>
       </div>
       <div class="card">
@@ -925,6 +993,7 @@ function viewProfile(){
       </div>
     </div>
     <div style="display:grid;gap:20px">
+      ${planCard()}
       <div class="card">
         <h2>Account</h2>
         ${!cloudOn() ? `<p class="muted small sub">Can't reach Maison Moi accounts right now (you may be offline). Everything is saved in this browser.</p>`
@@ -1178,6 +1247,8 @@ function itemFromProduct(p){
     url:p.url || '', img:p.img || '', addedAt:new Date().toISOString(), lastWorn:null, pref:0, status:p.status === 'removed' ? 'keep' : (p.status || 'keep')};
 }
 function applyCSV(){
+  const adds = (UI.csvPlan || []).filter(x => x.kind === 'new' ? x.f.owned !== false : x.f.owned === true && !(x.p.itemId && byId(x.p.itemId))).length;
+  if (adds && !canAdd(adds)) return;
   const now = new Date().toISOString(); let added = 0, updated = 0;
   (UI.csvPlan || []).forEach(x => {
     if (x.kind === 'update'){
@@ -1507,6 +1578,7 @@ function addDrafts(){
   const noPic = S.drafts.find(d => !d.img);
   if (noPic){ $('#draft-' + noPic.id).scrollIntoView({behavior:'smooth', block:'center'}); toast(`${noPic.name || 'One piece'} still needs a photo`); return; }
   const now = new Date().toISOString(), n = S.drafts.length;
+  if (!canAdd(n)) return;
   S.drafts.forEach(d => S.items.unshift({id:uid(), productId:d.productId || null, name:d.name.trim() || (cap(d.color) + ' ' + CATS[d.category].one.toLowerCase()), category:d.category, brand:d.brand, color:d.color, colorName:d.colorName, size:d.size,
     formality:d.formality, comfort:d.comfort, tags:d.tags, seasons:d.seasons, price:d.price, condition:d.condition, washEvery:d.washEvery, wearCount:(d.productId && (S.products.find(p => p.id === d.productId) || {}).wearCount) || 0, wearsSinceWash:0,
     sentimental:d.sentimental, sentNote:'', source:d.source, url:d.url, img:d.img, addedAt:now, lastWorn:null, pref:0, status:'keep'}));
@@ -1540,7 +1612,7 @@ function closetGrid(){
 function viewCloset(){
   const n = c => S.items.filter(i => i.category === c).length;
   return `<div class="page-head"><div><h1>My Closet</h1>
-      <p class="muted">${S.items.length} pieces · ${S.items.filter(isDirty).length} in the hamper</p></div>
+      <p class="muted">${S.items.length} pieces${isPlus() ? '' : ` (${Math.min(realItems(), FREE.items)} of ${FREE.items} on Free)`} · ${S.items.filter(isDirty).length} in the hamper</p></div>
     <div class="actions"><input id="q" class="input" style="width:220px" placeholder="Search name, brand, color, vibe" value="${esc(UI.q)}">
       <button class="btn" data-action="open-build">Bulk add</button><button class="btn primary" data-action="add-item">+ Add item</button></div></div>
     <div class="chips">${['all', ...Object.keys(CATS), 'sentimental'].map(c => `<button class="chip ${UI.cat === c ? 'on' : ''}" data-action="filter-cat" data-cat="${c}">${c === 'all' ? 'All ' + S.items.length : c === 'sentimental' ? '★ Sentimental' : CATS[c].label + ' ' + n(c)}</button>`).join('')}</div>
@@ -1931,6 +2003,7 @@ function saveItem(){
     const it = byId(UI.editing); Object.assign(it, data);
     if (it.sentimental && it.status === 'listed') it.status = 'keep';
   } else {
+    if (!canAdd()) return;
     S.items.unshift({...data, id:uid(), wearsSinceWash:0, addedAt:new Date().toISOString(), lastWorn:null, pref:0, status:'keep'});
   }
   save(); closeModal(); render(); toast(UI.editing ? 'Saved' : 'Added to your closet');
@@ -1947,7 +2020,7 @@ document.addEventListener('click', async e => {
       $$('.tab-group').forEach(x => x.classList.remove('open')); g.classList.toggle('open', !was); break;
     }
     case 'tab': S.tab = el.dataset.tab; save(); render(); window.scrollTo(0, 0); break;
-    case 'add-item': openItemModal(); break;
+    case 'add-item': if (canAdd()) openItemModal(); break;
     case 'edit-item': openItemModal(id); break;
     case 'toggle-sent': { e.stopPropagation(); const it = byId(id); it.sentimental = !it.sentimental; if (it.sentimental && it.status === 'listed') it.status = 'keep'; save(); render(); toast(it.sentimental ? 'Marked sentimental: protected from resale' : 'No longer sentimental'); break; }
     case 'filter-cat': UI.cat = el.dataset.cat; render(); break;
@@ -1976,6 +2049,7 @@ document.addEventListener('click', async e => {
     }
     case 'clear-cal': S.calendar = []; save(); render(); break;
     case 'style-me': {
+      if (!useRestyle()) break;
       const n = $('#day-notes'); if (n) S.day.notes = n.value;
       generatePlan(); render(); window.scrollTo({top:0, behavior:'smooth'}); break;
     }
@@ -1987,6 +2061,7 @@ document.addEventListener('click', async e => {
     }
     case 'log-moment': { const pm = S.plan.perMoment[+el.dataset.idx]; logWear(Object.values(pm.parts), [pm.m]); break; }
     case 'nope': {
+      if (!useRestyle()) break;
       const o = S.plan.options[+el.dataset.idx];
       Object.values(o.parts).forEach(pid => S.plan.moments.forEach(m => { S.prefs[m] = S.prefs[m] || {}; S.prefs[m][pid] = clamp((S.prefs[m][pid] || 0) - .35, -2, 2); }));
       generatePlan(); render(); toast("Noted. I'll steer away from that combo."); break;
@@ -2012,7 +2087,7 @@ document.addEventListener('click', async e => {
     }
     case 'board-tag': { const b = S.boards.find(x => x.id === id), v = el.dataset.v; b.tags = b.tags.includes(v) ? b.tags.filter(x => x !== v) : [...b.tags, v]; save(); render(); break; }
     case 'goal': el.classList.toggle('on'); break;
-    case 'set-theme': { S.theme = el.dataset.v; save(); render(); toast(`Wearing ${THEMES[S.theme].name}`); break; }
+    case 'set-theme': { if (!isPlus() && el.dataset.v !== FREE.theme){ upsell('theme'); break; } S.theme = el.dataset.v; save(); render(); toast(`Wearing ${THEMES[S.theme].name}`); break; }
     case 'p-goal': {
       const g = el.dataset.v, cur = S.profile.goals;
       if (cur.includes(g) && cur.length === 1){ toast('Keep at least one goal'); break; }
@@ -2027,6 +2102,8 @@ document.addEventListener('click', async e => {
     case 'auth-signin': S.localOnly = false; save(); render(); break;
     case 'auth-out': await cloudSignOut(); break;
     case 'cloud-sync': await cloudPush(true); break;
+    case 'start-trial': el.disabled = true; await cloudCheckout(); el.disabled = false; break;
+    case 'manage-sub': el.disabled = true; await cloudPortal(); el.disabled = false; break;
     case 'save-links': {
       const links = $('#s-links').value.split(/[\s,]+/).map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
       const fresh = links.filter(u => !S.boards.some(b => b.url === u));
@@ -2035,7 +2112,7 @@ document.addEventListener('click', async e => {
       toast(fresh.length ? `Saved. ${fresh.length} new link${fresh.length > 1 ? 's' : ''} added to Inspiration.` : 'Links saved'); break;
     }
     case 'finish-setup': finishSetup(el); break;
-    case 'open-build': S.tab = 'build'; UI.fromSetup = false; save(); render(); window.scrollTo(0, 0); break;
+    case 'open-build': if (!canAdd()) break; S.tab = 'build'; UI.fromSetup = false; save(); render(); window.scrollTo(0, 0); break;
     case 'skip-build': UI.fromSetup = false; S.tab = 'today'; save(); render(); break;
     case 'import-links': el.disabled = true; await importLinks($('#links-in').value); break;
     case 'add-drafts': addDrafts(); break;
@@ -2059,7 +2136,7 @@ document.addEventListener('click', async e => {
     case 'lib-import': $('#csv-file').click(); break;
     case 'csv-apply': applyCSV(); break;
     case 'lib-filter': UI.libF = el.dataset.f; render(); break;
-    case 'lib-readd': { const p = S.products.find(x => x.id === id); p.status = 'keep'; S.items.unshift(itemFromProduct(p)); generatePlan(); save(); render(); toast(`${p.name} is back in your closet`); break; }
+    case 'lib-readd': { if (!canAdd()) break; const p = S.products.find(x => x.id === id); p.status = 'keep'; S.items.unshift(itemFromProduct(p)); generatePlan(); save(); render(); toast(`${p.name} is back in your closet`); break; }
     case 'lib-forget': if (confirm('Forget this product completely?')){ S.products = S.products.filter(x => x.id !== id); dropHostedPhoto(id); save(); render(); } break;
     case 'disk-connect': await connectFolder(); break;
     case 'disk-reconnect': await reconnectFolder(); break;
