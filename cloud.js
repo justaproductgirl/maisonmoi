@@ -65,7 +65,7 @@ async function cloudPull(){
       cloudWrite();
       if (window.CLOSET_CATALOG && S.profile && S.profile.done && mergeCatalog()) save(); // pieces Claude added to catalog.js on this Mac
     }
-    await Promise.all([signPhotos(), loadPlan()]);
+    await Promise.all([signPhotos(), loadPlan(), loadAdmin()]);
     CLOUD.status = 'saved'; CLOUD.at = Date.now();
     if (!S.plan || S.plan.date !== S.day.date) generatePlan();
   } catch(e){
@@ -79,6 +79,10 @@ async function cloudPull(){
 async function loadPlan(){
   const {data, error} = await CLOUD.db.from('subscriptions').select('status,trial_end,current_period_end,cancel_at_period_end').eq('user_id', CLOUD.user.id).maybeSingle();
   if (!error){ S.sub = data || {status:'free'}; cloudWrite(); } // on a network hiccup, keep the last known plan
+}
+async function loadAdmin(){
+  const {data, error} = await CLOUD.db.rpc('admin_overview'); // the database says no unless you're in the admins table
+  CLOUD.admin = error ? null : data; CLOUD.adminAt = Date.now();
 }
 function planInfo(){
   const s = S.sub || {}, day = d => d ? new Date(d).toLocaleDateString([], {month:'long', day:'numeric'}) : '';
@@ -220,10 +224,10 @@ function cloudStatusText(){
 }
 
 function viewAuth(){
-  if (!CLOUD.checked) return '<div class="setup-wrap"><div class="setup-hero"><div class="logo"><div class="mark">✦</div>Maison Moi</div></div><div class="setup-form"></div></div>';
+  if (!CLOUD.checked) return '<div class="setup-wrap"><div class="setup-hero"><div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div></div><div class="setup-form"></div></div>';
   return `<div class="setup-wrap">
     <div class="setup-hero">
-      <div class="logo"><div class="mark">✦</div>Maison Moi</div>
+      <div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div>
       <h1>Your closet, styled for the day you're actually having.</h1>
       <p>Sign in to keep your closet, photos and outfits in your account, so they follow you to any device.</p>
     </div>
@@ -235,5 +239,6 @@ function viewAuth(){
       <div class="actions" style="margin-top:14px"><button class="btn primary" data-action="auth-in">Sign in</button><button class="btn" data-action="auth-up">Create account</button></div>
       <p class="small" style="margin-top:14px"><a href="#" data-action="auth-reset">Forgot your password?</a></p>
       <p class="small muted" style="margin-top:22px">Rather not make an account? <a href="#" data-action="auth-local">Keep everything on this browser</a>. You can sign in later from Profile.</p>
+      <p class="small muted" style="margin-top:10px">By creating an account you agree to our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
     </div></div>`;
 }

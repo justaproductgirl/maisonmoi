@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Maison Moi</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Jost:wght@400;500&family=Montserrat:wght@400;500;600;700&display=swap">
 <style>
@@ -515,6 +517,12 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 .meter{height:6px;background:var(--line, #e5e5e5);border-radius:3px;overflow:hidden;margin:6px 0 2px}.meter i{display:block;height:100%;background:var(--ink)}
 .up-faq{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
 @media (max-width:760px){.up-hero{grid-template-columns:1fr}}
+.admin-stats{grid-template-columns:repeat(4,1fr);margin-top:10px}
+.admin-table td,.admin-table th{text-align:left !important;width:auto !important;white-space:nowrap}
+@media (max-width:760px){.admin-stats{grid-template-columns:repeat(2,1fr)}}
+/* Maison Moi mark: white hanger on a black square, ringed so it reads on any header */
+.logo .mark,.setup-hero .logo .mark{background:#0b0b0b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M32 23.5v-2.2a5 5 0 1 0-5-5'/%3E%3Cpath d='M32 23.5 11.6 38.4a2.6 2.6 0 0 0 1.5 4.7h37.8a2.6 2.6 0 0 0 1.5-4.7Z'/%3E%3C/g%3E%3C/svg%3E") center/78% no-repeat !important;border-radius:0 !important;box-shadow:0 0 0 1.5px var(--head-ink)}
+.setup-hero .logo .mark{box-shadow:0 0 0 1.5px var(--card)}
 .au-msg{min-height:18px;margin-top:10px;font-size:13px}
 .au-msg.ok{color:var(--muted)}.au-msg.bad{color:#b8343b}
 </style>
@@ -522,12 +530,13 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 <body>
 <header>
   <div class="bar">
-    <button class="logo home-link" data-action="tab" data-tab="today" aria-label="Maison Moi home"><div class="mark">✦</div>Maison Moi</button>
+    <button class="logo home-link" data-action="tab" data-tab="today" aria-label="Maison Moi home"><div class="mark" aria-hidden="true"></div>Maison Moi</button>
     <nav>
-      <div class="tab-group" id="profile-group" data-subs="inspo">
+      <div class="tab-group" id="profile-group" data-subs="inspo admin">
         <button class="tab" data-action="tab" data-tab="profile">Profile</button><button class="tab caret" data-action="group-menu" aria-label="More profile pages">▾</button>
         <div class="tab-drop">
           <button class="tab" data-action="tab" data-tab="inspo">Inspiration</button>
+          <button class="tab" data-action="tab" data-tab="admin" id="admin-tab" hidden>Admin</button>
         </div>
       </div>
       <div class="tab-group" id="closet-group" data-subs="resale laundry">
@@ -821,7 +830,8 @@ function render(){
   const setup = !(S.profile && S.profile.done) || !!UI.editProfile;
   document.body.classList.toggle('setup', setup);
   if (setup){ $('#view').innerHTML = viewSetup(); return; }
-  const t = S.tab || 'today';
+  $('#admin-tab').hidden = !CLOUD.admin;
+  const t = S.tab === 'admin' && !CLOUD.admin ? 'today' : S.tab || 'today';
   $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   $$('.tab-group').forEach(g => {
     g.classList.toggle('sub', g.dataset.subs.split(' ').includes(t));
@@ -830,7 +840,7 @@ function render(){
   });
   const sellCount = S.items.length ? resellList().filter(x => x.i.status === 'keep').length : 0;
   $('.tab[data-tab="resale"]').innerHTML = 'Resell' + (sellCount ? `<span class="count">${sellCount}</span>` : '');
-  $('#view').innerHTML = ({today:viewToday, build:viewBuild, closet:viewCloset, library:viewLibrary, resale:viewResale, inspo:viewInspo, laundry:viewLaundry, profile:viewProfile, shop:viewShop, upgrade:viewUpgrade})[t]();
+  $('#view').innerHTML = ({today:viewToday, build:viewBuild, closet:viewCloset, library:viewLibrary, resale:viewResale, inspo:viewInspo, laundry:viewLaundry, profile:viewProfile, shop:viewShop, upgrade:viewUpgrade, admin:viewAdmin})[t]();
   if (t === 'shop') loadShopPicks();
   if (t === 'inspo') buildPinterest();
 }
@@ -844,7 +854,7 @@ function viewSetup(){
   const pics = [['dress','print',8,6,-8],['top','cream',44,0,6],['outerwear','camel',4,52,4],['shoes','white',52,52,-5],['bottom','denim',78,18,9],['accessory','brown',30,30,-3]];
   return `<div class="setup-wrap">
     <div class="setup-hero">
-      <div class="logo"><div class="mark">✦</div>Maison Moi</div>
+      <div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div>
       <h1>Your closet, styled for the day you're actually having.</h1>
       <p>Tell me a little about you. I'll check your local weather, learn your style from your inspiration, and start pulling outfits from what you already own.</p>
       <div class="collage">${pics.map(([c, col, x, y, r]) => `<img src="${garmentSVG(c, col)}" style="left:${x}%;top:${y}%;transform:rotate(${r}deg)">`).join('')}</div>
@@ -946,8 +956,27 @@ function viewUpgrade(){
   <div class="card up-card"><h2>Good to know</h2><div class="up-faq">
     <div><b>What happens after the trial?</b><p class="small muted">You're billed $${PLUS.price} a month starting day ${PLUS.trialDays + 1}. We'll email you before the trial ends.</p></div>
     <div><b>What if I cancel?</b><p class="small muted">Nothing is deleted. Your pieces, photos and history stay put; you just can't add past ${FREE.items} pieces and the app goes back to Little Black Dress.</p></div>
-    <div><b>How do I pay?</b><p class="small muted">Securely through Stripe. Maison Moi never sees or stores your card.</p></div>
+    <div><b>How do I pay?</b><p class="small muted">Securely through Stripe. Maison Moi never sees or stores your card. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p></div>
   </div></div>`;
+}
+
+/* ---- Admin: only shown to accounts in the admins table (the database refuses everyone else) ---- */
+function viewAdmin(){
+  const a = CLOUD.admin, pl = a.plans || {}, n = k => pl[k] || 0, paying = n('active');
+  const day = d => d ? new Date(d).toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : 'Never';
+  const planName = {free:'Free', trialing:'Trial', active:'Plus', comped:'Founder', past_due:'Past due', canceled:'Canceled'};
+  const stat = (v, l) => `<div><b>${v}</b><span class="small muted">${l}</span></div>`;
+  return `<button class="crumb" data-action="tab" data-tab="profile">← Profile</button>
+  <div class="page-head"><div><h1>Admin</h1><p class="muted">Only you can see this page. Updated ${new Date(CLOUD.adminAt).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}.</p></div>
+    <div class="actions"><button class="btn" data-action="admin-refresh">Refresh</button><a class="btn" href="https://supabase.com/dashboard/project/mkfiiqkbtqbjksdzzykv/auth/users" target="_blank" rel="noopener">Open Supabase</a></div></div>
+  <div class="card up-card" style="margin-top:0"><h2>Members</h2>
+    <div class="pstats admin-stats">${stat(a.accounts, 'accounts')}${stat(a.new_week, 'new this week')}${stat(a.active_week, 'active this week')}${stat('$' + paying * PLUS.price, 'monthly revenue')}</div>
+    <div class="pstats admin-stats">${stat(n('free'), 'on Free')}${stat(n('trialing'), 'in free trial')}${stat(paying, 'paying for Plus')}${stat(n('comped'), 'founder passes')}</div>
+    <div class="pstats admin-stats">${stat(a.pieces, 'closet pieces saved')}${stat(a.photos, 'photos stored')}${stat(n('past_due') + n('canceled'), 'past due or canceled')}${stat(a.accounts ? Math.round(a.pieces / a.accounts) : 0, 'pieces per account')}</div></div>
+  <div class="card up-card"><h2>Accounts</h2><p class="muted small sub">Newest first. Passwords are never visible, even to you.</p>
+    <div style="overflow-x:auto"><table class="up-table admin-table"><thead><tr><th>Email</th><th>Name</th><th>Plan</th><th>Pieces</th><th>Joined</th><th>Last sign-in</th></tr></thead>
+    <tbody>${(a.people || []).map(u => `<tr><td>${esc(u.email || '')}${u.confirmed ? '' : ' <span class="small muted">(unconfirmed)</span>'}</td><td>${esc(u.name || '')}</td>
+      <td>${planName[u.plan] || esc(u.plan)}${u.plan === 'trialing' && u.trial_end ? `<div class="small muted">ends ${day(u.trial_end)}</div>` : ''}</td><td>${u.pieces}</td><td>${day(u.joined)}</td><td>${day(u.last)}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
 
 /* ---- Profile tab ---- */
@@ -1004,7 +1033,7 @@ function viewProfile(){
             <button class="btn primary" data-action="auth-signin">Sign in or create account</button>`}
       </div>
       <div class="card">
-        <h2>Your data</h2><p class="muted small sub">${CLOUD.user ? 'A copy also lives in this browser so the app works offline. Export anytime for your own backup.' : 'Everything is stored in this browser. Export regularly so you always have a copy.'}</p>
+        <h2>Your data</h2><p class="muted small sub">${CLOUD.user ? 'A copy also lives in this browser so the app works offline. Export anytime for your own backup.' : 'Everything is stored in this browser. Export regularly so you always have a copy.'} <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a></p>
         <div class="pstats"><div><b>${real}</b><span class="small muted">closet pieces</span></div><div><b>${prods}</b><span class="small muted">in library</span></div><div><b>${photos}</b><span class="small muted">photos saved</span></div></div>
         <div class="data-row"><div><b>Products spreadsheet</b><div class="small muted">Edit in Excel or Sheets, then load your changes back in.</div></div>
           <div class="actions"><button class="btn sm" data-action="lib-export">Export CSV</button><button class="btn sm" data-action="lib-import">Update from CSV</button></div></div>
@@ -2103,6 +2132,7 @@ document.addEventListener('click', async e => {
     case 'auth-out': await cloudSignOut(); break;
     case 'cloud-sync': await cloudPush(true); break;
     case 'start-trial': el.disabled = true; await cloudCheckout(); el.disabled = false; break;
+    case 'admin-refresh': el.disabled = true; await loadAdmin(); render(); toast('Updated'); break;
     case 'manage-sub': el.disabled = true; await cloudPortal(); el.disabled = false; break;
     case 'save-links': {
       const links = $('#s-links').value.split(/[\s,]+/).map(x => x.trim()).filter(x => /^https?:\/\//i.test(x));
