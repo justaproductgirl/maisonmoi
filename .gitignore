@@ -1,0 +1,9 @@
+# Personal closet data stays out of the repo: it lives in your Supabase account instead.
+catalog.js
+products.csv
+images/
+tools/.shop_cache.json
+tools/__pycache__/
+.DS_Store
+commands.js
+backups/
