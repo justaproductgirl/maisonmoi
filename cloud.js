@@ -223,6 +223,14 @@ function cloudStatusText(){
   return {loading:'Loading your closet...', saving:'Saving...', error:esc(CLOUD.msg), saved:`All changes saved${CLOUD.at ? ' · ' + new Date(CLOUD.at).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : ''}`}[CLOUD.status] || 'Connected';
 }
 
+function planTeaser(){
+  const plan = (cls, name, price, note, perks) => `<div class="pt ${cls}"><div class="pt-name">${name}</div><div class="pt-price">${price}</div><div class="pt-note">${note}</div>
+    <ul>${perks.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
+  return `<div class="plan-teaser">
+    ${plan('', 'Free', '$0', 'Forever', [`Up to ${FREE.items} closet pieces`, `${FREE.restyles} outfit restyles a day`, 'Little Black Dress theme', 'Daily outfit with your forecast'])}
+    ${plan('pt-plus', 'Plus', `$${PLUS.price}<span>/mo</span>`, `${PLUS.trialDays} days free, cancel anytime`, ['Unlimited closet pieces', 'Unlimited restyles', `All ${Object.keys(THEMES).length} themes`, 'Everything in Free'])}
+  </div><p class="pt-foot">Start free, no card needed. Try Plus anytime from your Profile.</p>`;
+}
 function viewAuth(){
   if (!CLOUD.checked) return '<div class="setup-wrap"><div class="setup-hero"><div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div></div><div class="setup-form"></div></div>';
   return `<div class="setup-wrap">
@@ -230,6 +238,7 @@ function viewAuth(){
       <div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div>
       <h1>Your closet, styled for the day you're actually having.</h1>
       <p>Sign in to keep your closet, photos and outfits in your account, so they follow you to any device.</p>
+      ${planTeaser()}
     </div>
     <div class="setup-form au">
       <h2>Welcome</h2><p class="muted small">Sign in, or create an account with any email.</p>

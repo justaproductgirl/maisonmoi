@@ -523,6 +523,18 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 /* Maison Moi mark: white hanger on a black square, ringed so it reads on any header */
 .logo .mark,.setup-hero .logo .mark{background:#0b0b0b url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M32 23.5v-2.2a5 5 0 1 0-5-5'/%3E%3Cpath d='M32 23.5 11.6 38.4a2.6 2.6 0 0 0 1.5 4.7h37.8a2.6 2.6 0 0 0 1.5-4.7Z'/%3E%3C/g%3E%3C/svg%3E") center/78% no-repeat !important;border-radius:0 !important;box-shadow:0 0 0 1.5px var(--head-ink)}
 .setup-hero .logo .mark{box-shadow:0 0 0 1.5px var(--card)}
+/* Plans on the sign-in screen */
+.plan-teaser{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:32px;max-width:520px}
+.pt{border:1.5px solid currentColor;padding:16px 16px 12px;border-radius:var(--radius)}
+.pt-plus{background:var(--card);color:var(--ink);border-color:var(--card)}
+.pt-name{font-family:var(--mono);font-size:12px;letter-spacing:1.5px;text-transform:uppercase}
+.pt-price{font-size:30px;font-weight:800;line-height:1.1;margin-top:6px}.pt-price span{font-size:14px;font-weight:500}
+.pt-note{font-size:12px;opacity:.75;margin-bottom:8px}
+.pt ul{margin:0;padding:0;list-style:none;font-size:13px}.pt li{padding:4px 0;border-top:1px solid color-mix(in srgb, currentColor 22%, transparent)}
+.pt li::before{content:"✓ ";font-weight:700}
+.setup-hero p.pt-foot{font-size:12px;margin-top:12px}
+.setup-wrap > *{min-width:0}
+@media (max-width:520px){.plan-teaser{grid-template-columns:1fr}.setup-hero h1{font-size:36px;letter-spacing:-1px}.setup-form{padding:32px 22px}}
 .au-msg{min-height:18px;margin-top:10px;font-size:13px}
 .au-msg.ok{color:var(--muted)}.au-msg.bad{color:#b8343b}
 </style>
