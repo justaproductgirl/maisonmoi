@@ -1,8 +1,17 @@
 /* Maison Moi cloud: sign-in (Supabase Auth) and syncing your closet to your account.
    The app always runs from this browser's copy, so it's instant and works offline; each change is pushed
    to Supabase a moment later. Photos go to a private storage bucket, one folder per person. */
-const CLOUD_URL = 'https://mkfiiqkbtqbjksdzzykv.supabase.co';
-const CLOUD_KEY = 'sb_publishable_kcy8Iqb5nZk7s1Gb13ZsWA_CCqKgFdM'; // publishable: safe in public code, row level security guards the data
+// Two environments. Production is maisonmoi.app; everywhere else (sandbox.maisonmoi.app, localhost, this Mac's file copy)
+// is the sandbox, with its own Supabase project and Stripe test mode, so testing never touches real people.
+// Publishable keys are safe in public code: row level security guards the data.
+const ENVS = {
+  production: {url:'https://mkfiiqkbtqbjksdzzykv.supabase.co', key:'sb_publishable_kcy8Iqb5nZk7s1Gb13ZsWA_CCqKgFdM'},
+  sandbox:    {url:'', key:''}, // filled in once the sandbox Supabase project exists
+};
+const ENV = /^(www\.)?maisonmoi\.app$/.test(location.hostname) || !ENVS.sandbox.url ? 'production' : 'sandbox';
+const CLOUD_URL = ENVS[ENV].url, CLOUD_KEY = ENVS[ENV].key;
+if (ENV === 'sandbox') addEventListener('DOMContentLoaded', () => document.body.insertAdjacentHTML('beforeend',
+  '<div style="position:fixed;left:10px;bottom:10px;z-index:9999;background:#ffd400;color:#000;font:700 11px/1 monospace;letter-spacing:1px;padding:7px 9px;border:1.5px solid #000;pointer-events:none">SANDBOX · TEST DATA</div>'));
 const PHOTO_BUCKET = 'closet-photos';
 const DEVICE_ONLY = ['items', 'tab', 'weather', 'cloudUser', 'cloudRev', '_unsynced', 'localOnly', 'sub']; // never copied into closet_state
 const CLOUD = {db:null, user:null, checked:false, busy:false, again:false, t:0, retry:0, status:'', at:0, msg:'',

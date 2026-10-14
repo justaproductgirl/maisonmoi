@@ -2,7 +2,8 @@
 //   POST {action:'checkout', plan, return_url}  signed-in user -> Stripe Checkout link (plan 'monthly' or 'annual', 7-day trial the first time)
 //   POST {action:'portal', return_url}    signed-in user -> Stripe billing portal link (change card, cancel, invoices)
 //   POST from Stripe (stripe-signature)   webhook -> keeps public.subscriptions in step with Stripe
-// Secrets (Supabase > Edge Functions > Secrets): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
+// Secrets (Supabase > Edge Functions > Secrets): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+// plus STRIPE_PRODUCT_MONTHLY, STRIPE_PRODUCT_ANNUAL and SITE_URL (the sandbox project points these at test products and sandbox.maisonmoi.app).
 // Each plan uses its Stripe product's default price, so changing a price in Stripe needs no code change.
 import Stripe from 'npm:stripe@17';
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -13,9 +14,9 @@ const stripe = new Stripe(env('STRIPE_SECRET_KEY'), { httpClient: Stripe.createF
 const serverKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}').default;
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serverKey);
 const TRIAL_DAYS = 7;
-const PRODUCTS: Record<string, string> = { monthly: 'prod_VR8JTjDKiDATKq', annual: 'prod_VR8Jn1vupu8T2r' };
-const HOME = 'https://maisonmoi.app/';
-const RETURN_OK = ['https://maisonmoi.app', 'https://www.maisonmoi.app', 'https://justaproductgirl.github.io'];
+const PRODUCTS: Record<string, string> = { monthly: env('STRIPE_PRODUCT_MONTHLY') || 'prod_VR8JTjDKiDATKq', annual: env('STRIPE_PRODUCT_ANNUAL') || 'prod_VR8Jn1vupu8T2r' };
+const HOME = env('SITE_URL') || 'https://maisonmoi.app/';
+const RETURN_OK = ['https://maisonmoi.app', 'https://www.maisonmoi.app', 'https://justaproductgirl.github.io', 'https://sandbox.maisonmoi.app', 'http://localhost:8000'];
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
