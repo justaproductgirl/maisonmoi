@@ -241,7 +241,7 @@ function planTeaser(){
   const plan = (cls, name, price, note, perks) => `<div class="pt ${cls}"><div class="pt-name">${name}</div><div class="pt-price">${price}</div><div class="pt-note">${note}</div>
     <ul>${perks.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
   return `<div class="plan-teaser">
-    ${plan('', 'Free', '$0', 'Forever', [`Up to ${FREE.items} closet pieces`, `${FREE.restyles} outfit restyles a day`, 'Little Black Dress theme', 'Daily outfit with your forecast'])}
+    ${plan('', 'Free', '$0', 'Forever', [`Up to ${FREE.items} closet pieces`, `${FREE.restyles} outfit recommendations a day`, 'Little Black Dress theme', 'Daily outfit with your forecast'])}
     ${plan('pt-plus', 'Plus', `$${PLUS.price}<span>/mo</span>`, `${PLUS.trialDays} days free, cancel anytime`, ['Unlimited closet pieces', 'Unlimited restyles', `All ${Object.keys(THEMES).length} themes`, 'Everything in Free'])}
   </div><p class="pt-foot">Start free, no card needed. Try Plus anytime from your Profile.</p>`;
 }
