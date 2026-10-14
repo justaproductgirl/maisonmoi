@@ -235,6 +235,18 @@ input[type=checkbox]{accent-color:var(--accent)}
 .preview{aspect-ratio:1/1.1;border-radius:14px;overflow:hidden;background:var(--soft);border:1px solid var(--line)}
 .preview img{width:100%;height:100%;object-fit:cover}
 .photo-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.photo-btns .btn{display:flex;align-items:center;justify-content:center;gap:6px;text-align:center;white-space:nowrap;padding-left:8px;padding-right:8px;cursor:pointer}
+.add-steps{display:flex;align-items:center;gap:10px;padding:14px 20px 0;font-family:var(--mono);font-size:11.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.add-steps .on{color:var(--ink);font-weight:700}
+.add-steps .sep{flex:0 0 18px;height:1px;background:var(--line)}
+.add-steps .change{margin-left:auto;text-transform:none;letter-spacing:0;font-family:inherit;font-size:13px;color:var(--ink);background:none;border:0;padding:0;text-decoration:underline;cursor:pointer}
+.add-choose{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px}
+.add-choice{display:flex;flex-direction:column;align-items:flex-start;gap:8px;text-align:left;padding:22px;border:var(--edge);background:var(--card);cursor:pointer;transition:.15s}
+.add-choice:hover,.add-choice:focus-visible{background:var(--soft)}
+.add-choice .ic{font-size:30px;line-height:1}
+.add-choice b{font-size:17px}
+.add-choice span{font-size:13.5px;color:var(--muted);line-height:1.45}
+@media (max-width:640px){ .add-choose{grid-template-columns:1fr} }
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 .sent-box{background:var(--card);border:1.5px solid var(--ink);border-radius:12px;padding:12px;margin-top:14px}
@@ -2039,25 +2051,48 @@ async function fillFromProduct(url){
     `<div><label class="lbl">Your ${esc(o.name.toLowerCase())}</label><select class="input f-vsel" data-opt="${i}"><option value="">Pick...</option>${o.values.map(v => `<option ${v === d.sel[i] ? 'selected' : ''} value="${esc(v)}">${esc(titleCase(v))}</option>`).join('')}</select></div>`).join('')}</div>` : '';
   toast('Filled in from the store. Pick your color and size.');
 }
-function openItemModal(id){
+// Adding a new piece is two steps: choose how (from a store link or a photo), then the details.
+function addChooserModal(){
+  $('#modal').innerHTML = `
+    <div class="modal-head"><h2>Add to closet</h2><button class="btn ghost" data-action="close-modal">✕</button></div>
+    ${addSteps(null)}
+    <p class="muted" style="margin:14px 20px 0">How do you want to add it?</p>
+    <div class="add-choose">
+      <button class="add-choice" data-action="add-mode" data-v="site"><span class="ic">🔗</span><b>Add from Site</b><span>Paste a link from the store. The photo, name, color and size fill in for you.</span></button>
+      <button class="add-choice" data-action="add-mode" data-v="manual"><span class="ic">📷</span><b>Upload Manually</b><span>Take or upload a photo of the piece, then fill in the details yourself.</span></button>
+    </div>
+    <div class="modal-foot"><span class="small muted">Adding a lot at once? <a href="#" data-action="add-bulk">Build your closet</a> takes many links or photos.</span>
+      <div class="actions"><button class="btn" data-action="close-modal">Cancel</button></div></div>`;
+  $('#modal-wrap').classList.add('open');
+}
+function addSteps(mode){
+  return `<div class="add-steps"><span class="${mode ? '' : 'on'}">1 · Choose how</span><i class="sep"></i><span class="${mode ? 'on' : ''}">2 · ${mode === 'site' ? 'Add from Site' : mode === 'manual' ? 'Upload Manually' : 'Details'}</span>${mode ? '<button class="change" data-action="add-back">Change</button>' : ''}</div>`;
+}
+function openItemModal(id, mode){
+  if (!id && !mode) return addChooserModal();
   UI.formDraft = null;
   const it = id ? byId(id) : {name:'', category:'top', brand:'', color:'black', formality:3, comfort:3, tags:[], seasons:['all'], price:'', condition:'Good', washEvery:CATS.top.wash, wearCount:0, sentimental:false, sentNote:'', source:'closet', url:'', img:''};
   UI.editing = id || null; UI.formImg = it.img || '';
   const opt = (list, cur, lab = x => cap(x)) => list.map(v => `<option value="${v}" ${v === cur ? 'selected' : ''}>${lab(v)}</option>`).join('');
+  if (id) mode = null;
+  const preview = `<div class="preview"><img id="f-preview" src="${esc(cloudImg(UI.formImg) || garmentSVG(it.category, it.color))}" referrerpolicy="no-referrer"></div>`;
+  const photoBtns = `<div class="photo-btns">
+          <label class="btn sm">📷 Take photo<input type="file" accept="image/*" capture="environment" class="f-file" hidden></label>
+          <label class="btn sm">🖼 Upload<input type="file" accept="image/*" class="f-file" hidden></label>
+        </div>`;
+  const link = `<label class="lbl" ${mode === 'site' ? 'style="margin-top:0"' : ''}>Product page link</label>
+        <input class="input" id="f-url" placeholder="Paste a store link to fill this in" value="${esc(it.url)}">
+        ${mode === 'site' ? '<div class="hint" style="margin-bottom:10px">Works with most stores. If one blocks it, upload a photo below instead.</div>' : ''}
+        <div id="f-variant"></div>`;
+  const imgUrl = `<label class="lbl">Or product image URL</label>
+        <input class="input" id="f-imgurl" placeholder="Right-click product photo > Copy image address" value="${UI.formImg.startsWith('http') ? esc(UI.formImg) : ''}">`;
   $('#modal').innerHTML = `
     <div class="modal-head"><h2>${id ? 'Edit piece' : 'Add to closet'}</h2><button class="btn ghost" data-action="close-modal">✕</button></div>
+    ${mode ? addSteps(mode) : ''}
     <div class="modal-body">
-      <div>
-        <div class="preview"><img id="f-preview" src="${esc(cloudImg(UI.formImg) || garmentSVG(it.category, it.color))}" referrerpolicy="no-referrer"></div>
-        <div class="photo-btns">
-          <label class="btn sm" style="text-align:center">📷 Take photo<input type="file" accept="image/*" capture="environment" class="f-file" hidden></label>
-          <label class="btn sm" style="text-align:center">🖼 Upload<input type="file" accept="image/*" class="f-file" hidden></label>
-        </div>
-        <label class="lbl">Product page link</label>
-        <input class="input" id="f-url" placeholder="Paste a store link to fill this in" value="${esc(it.url)}">
-        <div id="f-variant"></div>
-        <label class="lbl">Or product image URL</label>
-        <input class="input" id="f-imgurl" placeholder="Right-click product photo > Copy image address" value="${UI.formImg.startsWith('http') ? esc(UI.formImg) : ''}">
+      <div>${mode === 'site' ? link + preview + `<label class="lbl">Or use your own photo</label>` + photoBtns + imgUrl
+          : mode === 'manual' ? preview + photoBtns
+          : preview + photoBtns + link + imgUrl}
         <label class="lbl">Source</label>
         <div class="seg"><button class="${it.source !== 'online' ? 'on' : ''}" data-action="set-source" data-v="closet">From my closet</button><button class="${it.source === 'online' ? 'on' : ''}" data-action="set-source" data-v="online">Found online</button></div>
       </div>
@@ -2097,11 +2132,12 @@ function openItemModal(id){
       <div class="actions"><button class="btn" data-action="close-modal">Cancel</button><button class="btn primary" data-action="save-item">Save</button></div></div>`;
   UI.formSource = it.source || 'closet';
   $('#modal-wrap').classList.add('open');
+  if (mode === 'site') setTimeout(() => { const u = $('#f-url'); if (u) u.focus(); }, 50);
 }
 function refreshPreview(){ if (!UI.formImg) $('#f-preview').src = garmentSVG($('#f-cat').value, $('#f-color').value); }
 function closeModal(){ $('#modal-wrap').classList.remove('open'); }
 function saveItem(){
-  const v = id => $('#' + id).value;
+  const v = id => { const el = $('#' + id); return el ? el.value : ''; };   // link fields are absent in Upload Manually
   const data = {
     name:v('f-name').trim() || 'Untitled piece', category:v('f-cat'), brand:v('f-brand').trim(), color:v('f-color'), size:v('f-size').trim(), colorName:v('f-colorname').trim(),
     formality:+v('f-form'), comfort:+v('f-comf'), tags:chipVals('f-tags'), seasons:chipVals('f-seasons').length ? chipVals('f-seasons') : ['all'],
@@ -2131,6 +2167,9 @@ document.addEventListener('click', async e => {
     case 'tab': S.tab = el.dataset.tab; save(); render(); window.scrollTo(0, 0); break;
     case 'add-item': if (canAdd()) openItemModal(); break;
     case 'edit-item': openItemModal(id); break;
+    case 'add-mode': openItemModal(null, el.dataset.v); break;
+    case 'add-back': openItemModal(); break;
+    case 'add-bulk': e.preventDefault(); closeModal(); S.tab = 'build'; save(); render(); window.scrollTo(0, 0); break;
     case 'toggle-sent': { e.stopPropagation(); const it = byId(id); it.sentimental = !it.sentimental; if (it.sentimental && it.status === 'listed') it.status = 'keep'; save(); render(); toast(it.sentimental ? 'Marked sentimental: protected from resale' : 'No longer sentimental'); break; }
     case 'filter-cat': UI.cat = el.dataset.cat; render(); break;
     case 'chip': el.classList.toggle('on'); break;
@@ -2274,7 +2313,7 @@ document.addEventListener('click', async e => {
 document.addEventListener('change', async e => {
   const t = e.target;
   if (t.classList.contains('f-file') && t.files[0]){
-    try { UI.formImg = await resizeImage(t.files[0]); $('#f-preview').src = UI.formImg; $('#f-imgurl').value = ''; }
+    try { UI.formImg = await resizeImage(t.files[0]); $('#f-preview').src = UI.formImg; if ($('#f-imgurl')) $('#f-imgurl').value = ''; }
     catch(err){ toast("Couldn't read that photo. Try a JPG or PNG."); }
   }
   if (t.id === 'f-imgurl'){
