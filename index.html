@@ -937,7 +937,7 @@ async function finishSetup(btn){
 
 /* ---- Plans: Free and Maison Moi Plus ---- */
 const FREE = {items:15, restyles:2, theme:'lbd'};
-const PLUS = {price:8, trialDays:7};
+const PLUS = {price:5, trialDays:7};
 const realItems = () => S.items.filter(i => !i.demo).length;
 const themeOn = () => isPlus() || !S.theme ? (S.theme || 'lbd') : FREE.theme;
 const restylesLeft = () => isPlus() ? Infinity : FREE.restyles - (S.restyles && S.restyles.date === todayISO() ? S.restyles.n : 0);
