@@ -41,10 +41,37 @@ create policy "own profile" on public.profiles     for all using (auth.uid() = u
 create policy "own items"   on public.items        for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own state"   on public.closet_state for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Photos: private bucket, each user gets a folder named after their user id
+-- Photos: private bucket, each user gets a folder named after their user id.
+-- Images only, 5 MB each (the app shrinks uploads to about 100 KB), and a cap on how many photos one account can keep.
 insert into storage.buckets (id, name, public) values ('closet-photos', 'closet-photos', false)
   on conflict (id) do nothing;
+update storage.buckets set file_size_limit = 5242880, allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+  where id = 'closet-photos';
+
+-- Room for another photo? Free accounts keep up to 200, Plus up to 5,000. Lives outside the public API schema.
+create schema if not exists private;
+create or replace function private.photo_room() returns boolean
+language sql stable security definer set search_path = '' as $$
+  select (select count(*) from storage.objects
+          where bucket_id = 'closet-photos' and (storage.foldername(name))[1] = auth.uid()::text)
+       < case when exists (select 1 from public.subscriptions where user_id = auth.uid() and status in ('trialing', 'active', 'comped'))
+              then 5000 else 200 end
+$$;
+revoke all on function private.photo_room() from public, anon;
+grant usage on schema private to authenticated;
+grant execute on function private.photo_room() to authenticated;
+
 drop policy if exists "own photos" on storage.objects;
-create policy "own photos" on storage.objects for all
+drop policy if exists "own photos read" on storage.objects;
+drop policy if exists "own photos add" on storage.objects;
+drop policy if exists "own photos change" on storage.objects;
+drop policy if exists "own photos remove" on storage.objects;
+create policy "own photos read" on storage.objects for select to authenticated
+  using (bucket_id = 'closet-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "own photos add" on storage.objects for insert to authenticated
+  with check (bucket_id = 'closet-photos' and (storage.foldername(name))[1] = auth.uid()::text and private.photo_room());
+create policy "own photos change" on storage.objects for update to authenticated
   using (bucket_id = 'closet-photos' and (storage.foldername(name))[1] = auth.uid()::text)
   with check (bucket_id = 'closet-photos' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "own photos remove" on storage.objects for delete to authenticated
+  using (bucket_id = 'closet-photos' and (storage.foldername(name))[1] = auth.uid()::text);

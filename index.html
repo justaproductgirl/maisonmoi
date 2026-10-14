@@ -575,7 +575,7 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 <input type="file" id="csv-file" accept=".csv,text/csv" hidden>
 <script src="catalog.js"></script>
 <script src="commands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="vendor/supabase-js-2.117.3.js"></script><!-- pinned copy served from this site; to upgrade, download the new dist/umd/supabase.js -->
 <script src="cloud.js"></script>
 <script src="engine.js"></script>
 
@@ -1066,6 +1066,8 @@ function viewProfile(){
           <div class="actions"><button class="btn sm warn" data-action="clear-demo" ${demo ? '' : 'disabled'}>Remove</button></div></div>
         <div class="data-row"><div><b>Reset everything</b><div class="small muted">Erases your closet, library, history and profile, then restarts setup.</div></div>
           <div class="actions"><button class="btn sm warn" data-action="reset-all">Reset</button></div></div>
+        ${CLOUD.user ? `<div class="data-row"><div><b>Delete my account</b><div class="small muted">Permanently deletes your account, closet and photos${isPlus() && (S.sub || {}).status !== 'comped' ? ', and ends Plus right away' : ''}.</div></div>
+          <div class="actions"><button class="btn sm warn" data-action="delete-account">Delete</button></div></div>` : ''}
       </div>
     </div>
   </div>`;
@@ -2147,6 +2149,7 @@ document.addEventListener('click', async e => {
     case 'auth-local': e.preventDefault(); S.localOnly = true; save(); render(); break;
     case 'auth-signin': S.localOnly = false; save(); render(); break;
     case 'auth-out': await cloudSignOut(); break;
+    case 'delete-account': await cloudDeleteAccount(); break;
     case 'cloud-sync': await cloudPush(true); break;
     case 'start-trial': el.disabled = true; await cloudCheckout(); el.disabled = false; break;
     case 'admin-refresh': el.disabled = true; await loadAdmin(); render(); toast('Updated'); break;

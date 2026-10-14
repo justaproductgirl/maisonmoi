@@ -1,6 +1,7 @@
 // Maison Moi billing: one Supabase Edge Function named "stripe" (deploy with "Verify JWT" turned off).
 //   POST {action:'checkout', plan, return_url}  signed-in user -> Stripe Checkout link (plan 'monthly' or 'annual', 7-day trial the first time)
 //   POST {action:'portal', return_url}    signed-in user -> Stripe billing portal link (change card, cancel, invoices)
+//   POST {action:'delete_account'}        signed-in user -> deletes their Stripe customer (ending any subscription at once), photos and account
 //   POST from Stripe (stripe-signature)   webhook -> keeps public.subscriptions in step with Stripe
 // Secrets (Supabase > Edge Functions > Secrets): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
 // plus STRIPE_PRODUCT_MONTHLY, STRIPE_PRODUCT_ANNUAL and SITE_URL (the sandbox project points these at test products and sandbox.maisonmoi.app).
@@ -10,7 +11,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const env = (k: string) => (Deno.env.get(k) || '').trim(); // pasted secrets often pick up a stray space or newline
 // Pinned to the webhook's API version; Managed Payments (Stripe as seller of record) needs 2025-03-31 or later.
-const stripe = new Stripe(env('STRIPE_SECRET_KEY'), { apiVersion: '2026-09-30.endive' as any, httpClient: Stripe.createFetchHttpClient() });
+// The placeholder lets the function start on a project with no Stripe key yet (Stripe calls then fail, account deletion still works).
+const stripe = new Stripe(env('STRIPE_SECRET_KEY') || 'no_key_set', { apiVersion: '2026-09-30.endive' as any, httpClient: Stripe.createFetchHttpClient() });
 // Server-side key: the classic service role key, or the newer sb_secret_ key on projects that use the new key system.
 const serverKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}').default;
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serverKey);
@@ -60,6 +62,25 @@ Deno.serve(async (req) => {
       });
       return json({ url: s.url });
     }
+    if (action === 'delete_account') {
+      // Deleting the Stripe customer cancels any subscription immediately, so nothing more is ever charged.
+      if (sub?.stripe_customer_id) {
+        try { await stripe.customers.del(sub.stripe_customer_id); }
+        catch (e) { if ((e as any)?.code !== 'resource_missing') throw e; }
+      }
+      const bucket = db.storage.from('closet-photos');
+      for (let round = 0; round < 50; round++) { // 1,000 photos per round
+        const { data: files, error } = await bucket.list(user.id, { limit: 1000 });
+        if (error) throw error;
+        const paths = (files || []).filter((f) => f.id).map((f) => `${user.id}/${f.name}`);
+        if (!paths.length) break;
+        const { error: gone } = await bucket.remove(paths);
+        if (gone) throw gone;
+      }
+      const { error } = await db.auth.admin.deleteUser(user.id); // profiles, items, closet_state and subscriptions go with it
+      if (error) throw error;
+      return json({ deleted: true });
+    }
     return json({ error: 'Unknown action' }, 400);
   } catch (e) {
     console.error(e);
@@ -94,5 +115,6 @@ async function save(sub: any, userId?: string | null) {
     current_period_end: when(sub.current_period_end ?? item?.current_period_end), // newer Stripe API versions keep it on the item
     cancel_at_period_end: !!sub.cancel_at_period_end, updated_at: new Date().toISOString(),
   });
+  if (error?.code === '23503') return console.warn('Account already deleted, skipping Stripe update for', uid); // late events after a deletion
   if (error) throw error;
 }

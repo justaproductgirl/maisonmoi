@@ -75,7 +75,8 @@ async function cloudPull(){
       if (window.CLOSET_CATALOG && S.profile && S.profile.done && mergeCatalog()) save(); // pieces Claude added to catalog.js on this Mac
     }
     await Promise.all([signPhotos(), loadPlan(), loadAdmin()]);
-    CLOUD.status = 'saved'; CLOUD.at = Date.now();
+    CLOUD.status = 'saved'; CLOUD.at = CLOUD.pulledAt = Date.now();
+    cleanPhotos().catch(() => {});
     if (!S.plan || S.plan.date !== S.day.date) generatePlan();
   } catch(e){
     CLOUD.status = 'error'; CLOUD.msg = cloudErr(e);
@@ -127,20 +128,18 @@ async function cloudPush(loud){
   const db = CLOUD.db, uid = CLOUD.user.id, now = new Date().toISOString();
   try {
     await uploadPhotos(loud);
-    const seen = new Set(), rows = [];
-    S.items.forEach(i => {
-      seen.add(i.id);
-      const j = JSON.stringify(i);
-      if (CLOUD.sent.items[i.id] !== j) rows.push({user_id:uid, id:i.id, data:i, image_path:String(i.img || '').startsWith('sb:') ? i.img.slice(3) : null, updated_at:now});
-    });
-    for (const part of chunks(rows, 100)){
-      const {error} = await db.from('items').upsert(part); if (error) throw error;
-      part.forEach(r => CLOUD.sent.items[r.id] = JSON.stringify(r.data));
-    }
+    // Removals go first, so swapping pieces or resetting the sample closet never trips the database's piece limits.
+    const seen = new Set(S.items.map(i => i.id));
     const gone = Object.keys(CLOUD.sent.items).filter(id => !seen.has(id));
     for (const part of chunks(gone, 100)){
       const {error} = await db.from('items').delete().eq('user_id', uid).in('id', part); if (error) throw error;
       part.forEach(id => delete CLOUD.sent.items[id]);
+    }
+    const rows = S.items.filter(i => CLOUD.sent.items[i.id] !== JSON.stringify(i))
+      .map(i => ({user_id:uid, id:i.id, data:i, image_path:String(i.img || '').startsWith('sb:') ? i.img.slice(3) : null, updated_at:now}));
+    for (const part of chunks(rows, 100)){
+      const {error} = await db.from('items').upsert(part); if (error) throw error;
+      part.forEach(r => CLOUD.sent.items[r.id] = JSON.stringify(r.data));
     }
     const state = Object.fromEntries(Object.entries(S).filter(([k]) => !DEVICE_ONLY.includes(k)));
     const sj = JSON.stringify(state);
@@ -154,6 +153,7 @@ async function cloudPush(loud){
     S.cloudRev = rev; S._unsynced = false; cloudWrite();
     CLOUD.status = 'saved'; CLOUD.at = Date.now(); CLOUD.retry = 0;
     if (loud && rows.length) toast(`Saved ${rows.length} piece${rows.length > 1 ? 's' : ''} to your account`);
+    if (gone.length || rows.length) cleanPhotos().catch(() => {});
   } catch(e){
     CLOUD.status = 'error'; CLOUD.msg = cloudErr(e);
     CLOUD.retry = Math.min((CLOUD.retry || 15) * 2, 600);   // try again later; this browser's copy is safe meanwhile
@@ -193,6 +193,25 @@ async function uploadPhotos(loud){
   if (Object.keys(map).length){ all.forEach(x => { if (map[x.img]) x.img = map[x.img]; }); cloudWrite(); await signPhotos(); render(); }
   if (missed && loud) toast(`${missed} photo${missed > 1 ? 's' : ''} couldn't be read yet. Turn on the shop helper and they'll upload next time.`);
 }
+// Photos nothing points at any more (a deleted piece, a replaced photo) are removed from storage, at most every 10 minutes.
+// "Points at" means a saved piece in your account or anything in this browser. Only a browser that loaded your closet in the
+// last half hour does this, and only files over a day old go, so a photo another device just added is never touched.
+async function cleanPhotos(){
+  if (!CLOUD.user || Date.now() - (CLOUD.pulledAt || 0) > 30 * 60e3 || Date.now() - (CLOUD.cleanedAt || 0) < 10 * 60e3) return;
+  CLOUD.cleanedAt = Date.now();
+  const db = CLOUD.db, uid = CLOUD.user.id, bucket = db.storage.from(PHOTO_BUCKET), files = [];
+  for (let offset = 0; ; offset += 1000){
+    const {data, error} = await bucket.list(uid, {limit:1000, offset}); if (error) return;
+    files.push(...data); if (data.length < 1000) break;
+  }
+  const {data:rows, error} = await db.from('items').select('image_path').eq('user_id', uid).not('image_path', 'is', null);
+  if (error) return;
+  const used = new Set([...rows.map(r => r.image_path),
+    ...[...S.items, ...S.products].map(x => x.img).filter(v => typeof v === 'string' && v.startsWith('sb:')).map(v => v.slice(3))]);
+  const dayAgo = Date.now() - 86400e3;
+  const gone = files.filter(f => f.id && !used.has(`${uid}/${f.name}`) && Date.parse(f.created_at) < dayAgo).map(f => `${uid}/${f.name}`);
+  for (const part of chunks(gone, 100)) await bucket.remove(part);
+}
 async function signPhotos(){
   const paths = [...new Set([...S.items, ...S.products].map(x => x.img).filter(v => typeof v === 'string' && v.startsWith('sb:')).map(v => v.slice(3)))].filter(p => !CLOUD.signed[p]);
   for (const part of chunks(paths, 100)){
@@ -227,6 +246,22 @@ async function cloudSignOut(){
   if (S._unsynced && !confirm("Some changes haven't synced yet and will be lost. Sign out anyway?")) return;
   await CLOUD.db.auth.signOut();
   localStorage.removeItem(LS_KEY);
+  location.reload();
+}
+// Deletes the account for good: Stripe customer (any subscription stops at once), photos, closet, then this browser's copies.
+async function cloudDeleteAccount(){
+  if (!CLOUD.user) return;
+  const typed = prompt('This permanently deletes your Maison Moi account: your closet, photos and history. If you have Plus, it ends right away and you won\'t be charged again.\n\nType DELETE to confirm.');
+  if (typed === null) return;
+  if (typed.trim().toUpperCase() !== 'DELETE') return toast('Nothing was deleted. Type DELETE to confirm.');
+  toast('Deleting your account...');
+  const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action:'delete_account'}});
+  if (error || !data || !data.deleted) return toast("Couldn't delete your account. Try again, or email jackie@maisonmoi.app.");
+  clearTimeout(CLOUD.t); CLOUD.user = null;
+  await CLOUD.db.auth.signOut({scope:'local'}).catch(() => {});
+  [LS_KEY, LS_KEY + '.device-backup'].forEach(k => localStorage.removeItem(k));
+  try { indexedDB.deleteDatabase('closetStudio'); } catch(e){}
+  alert('Your Maison Moi account and everything in it has been deleted.');
   location.reload();
 }
 function cloudBadge(){
