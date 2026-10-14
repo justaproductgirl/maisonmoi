@@ -8,7 +8,9 @@ import Stripe from 'npm:stripe@17';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { httpClient: Stripe.createFetchHttpClient() });
-const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+// Server-side key: the classic service role key, or the newer sb_secret_ key on projects that use the new key system.
+const serverKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}').default;
+const db = createClient(Deno.env.get('SUPABASE_URL')!, serverKey);
 const TRIAL_DAYS = 7;
 const PRODUCTS: Record<string, string> = { monthly: 'prod_VR8JTjDKiDATKq', annual: 'prod_VR8Jn1vupu8T2r' };
 const HOME = 'https://maisonmoi.app/';
