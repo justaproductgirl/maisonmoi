@@ -258,6 +258,9 @@ input[type=checkbox]{accent-color:var(--accent)}
 /* Setup */
 body.setup header,body.setup .fab{display:none}
 body.setup main{max-width:none;padding:0}
+footer.site{max-width:1280px;margin:-60px auto 0;padding:0 20px 96px;display:flex;flex-wrap:wrap;gap:8px 22px;font-family:var(--mono,monospace);font-size:11px;letter-spacing:1.5px;text-transform:uppercase}
+footer.site a{color:var(--muted);text-decoration:none}footer.site a:hover{color:var(--ink)}
+body.setup footer.site{margin-top:0;padding:18px 20px 24px}
 .setup-wrap{min-height:100vh;display:grid;grid-template-columns:1fr 1.1fr}
 .setup-hero{background:var(--accent);color:var(--accent-ink);padding:48px 56px;display:flex;flex-direction:column;position:relative;overflow:hidden}
 .setup-hero .logo .mark{background:var(--card);color:var(--ink)}
@@ -599,6 +602,7 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
   </div>
 </header>
 <main id="view"></main>
+<footer class="site"><a href="feedback.html">Submit feedback</a><a href="contact.html">Contact us</a><a href="privacy.html">Privacy Policy</a></footer>
 <button class="fab" data-action="add-item" aria-label="Add item">＋</button>
 <div class="modal-wrap" id="modal-wrap"><div class="modal" id="modal"></div></div>
 <div class="toast" id="toast"></div>

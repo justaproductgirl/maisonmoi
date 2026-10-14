@@ -29,6 +29,8 @@ ul{padding-left:20px}li{margin:4px 0}
 a{color:var(--ink)}
 .back{display:inline-block;margin-bottom:14px;font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);text-decoration:none}
 @media (max-width:600px){.card{padding:24px 20px}h1{font-size:30px}}
+footer.site{max-width:820px;margin:0 auto;padding:0 24px 40px;display:flex;flex-wrap:wrap;gap:8px 22px;font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase}
+footer.site a{color:var(--muted);text-decoration:none}footer.site a:hover{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -51,6 +53,8 @@ a{color:var(--ink)}
   <li><b>Your device location, only if you turn it on.</b> If you tap "Use my location" for the weather, your browser asks your permission, then we round your location to about 1 km. It stays on your device (it is never saved to your account) and is used only to get your forecast. Tap "Use" with your city to switch back to your zip code anytime.</li>
   <li><b>Your calendar, only if you import one.</b> Event titles, times and locations from a calendar file you choose, used to plan outfits for your day. You can clear it anytime.</li>
   <li><b>Your plan.</b> If you subscribe to Maison Moi Plus, Stripe handles your payment as the seller of record. We receive your plan status, trial and renewal dates and a Stripe customer ID. We never see or store your card number.</li>
+  <li><b>Feedback you send.</b> If you use Submit feedback while signed in, we save your note, the kind of feedback you picked, your account email, the page you came from and your browser type, so we can understand and follow up.</li>
+  <li><b>Messages you send us.</b> If you use the Contact us form, we receive your name, email, topic and message by email.</li>
   <li><b>Basic technical information.</b> Like most websites, the services that host Maison Moi may log your IP address and browser type for security and to keep things running.</li>
 </ul>
 
@@ -58,7 +62,7 @@ a{color:var(--ink)}
 <ul>
   <li>To run the app: show your closet, recommend outfits for your weather and plans, and sync across your devices.</li>
   <li>To manage your plan, free trial and billing.</li>
-  <li>To answer you when you contact us, and to keep accounts secure.</li>
+  <li>To answer you when you contact us, to improve Maison Moi using your feedback, and to keep accounts secure.</li>
 </ul>
 <p>We don't sell your information, show you ads, or use advertising or analytics trackers. We don't use your closet to train AI models.</p>
 
@@ -67,11 +71,12 @@ a{color:var(--ink)}
 <table>
   <thead><tr><th>Service</th><th>What it does</th><th>What it receives</th></tr></thead>
   <tbody>
-    <tr><td>Supabase</td><td>Accounts, database and photo storage</td><td>Your account and everything you save in the app</td></tr>
+    <tr><td>Supabase</td><td>Accounts, database and photo storage</td><td>Your account, everything you save in the app and any feedback you send</td></tr>
     <tr><td>Stripe</td><td>Seller of record for Maison Moi Plus: takes payment, handles sales tax and sends receipts</td><td>Your email, billing address and payment details, entered directly with Stripe, which uses them under <a href="https://stripe.com/privacy" target="_blank" rel="noopener">its own privacy policy</a></td></tr>
     <tr><td>GitHub Pages</td><td>Hosts the website</td><td>Standard web request information, such as your IP address</td></tr>
     <tr><td>Zippopotam.us</td><td>Turns your zip code into a city</td><td>Your zip code</td></tr>
-    <tr><td>Cloudflare Turnstile</td><td>Checks that people creating an account or signing in aren't bots</td><td>Standard web request and browser information on the sign-in screen, under <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener">its own privacy policy</a></td></tr>
+    <tr><td>Cloudflare Turnstile</td><td>Checks that people creating an account, signing in or using the contact form aren't bots</td><td>Standard web request and browser information on the sign-in screen and contact form, under <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener">its own privacy policy</a></td></tr>
+    <tr><td>Google Workspace</td><td>Our email: delivers contact form messages to our inbox and our replies to you</td><td>Your name, email address and message</td></tr>
     <tr><td>Open-Meteo</td><td>Your daily weather forecast</td><td>The approximate location of your zip code, or your rounded device location if you turned that on</td></tr>
     <tr><td>Google Fonts</td><td>Fonts</td><td>Standard web request information</td></tr>
     <tr><td>Stores you import from</td><td>When you paste a product link, your browser reads that product's details and photo straight from the store's website</td><td>Standard web request information, sent only to the store whose link you pasted</td></tr>
@@ -91,6 +96,7 @@ a{color:var(--ink)}
   <li>We keep your information while your account is open.</li>
   <li>You can delete any piece, photo or calendar import in the app at any time.</li>
   <li>You can delete your whole account yourself in the app (Profile, then Delete my account). This immediately deletes your account, closet and photos, ends any Plus subscription, and clears the copy on that browser. You can also email us from your account's email address and we'll do it within 30 days. Any copies in backups expire within 30 days after that.</li>
+  <li>We keep feedback and contact emails as long as they help us improve Maison Moi or support you. Feedback is deleted with your account.</li>
   <li>Stripe keeps billing records for as long as the law requires.</li>
 </ul>
 
@@ -112,8 +118,9 @@ a{color:var(--ink)}
 <p>If we change this policy, we'll update the date at the top. For important changes, we'll let you know in the app or by email first.</p>
 
 <h2>Contact</h2>
-<p>Questions or requests: <a href="mailto:jackie@maisonmoi.app">jackie@maisonmoi.app</a></p>
+<p>Questions or requests: use our <a href="contact.html">contact form</a> or email <a href="mailto:hello@maisonmoi.app">hello@maisonmoi.app</a>.</p>
 </div>
 </main>
+<footer class="site"><a href="feedback.html">Submit feedback</a><a href="contact.html">Contact us</a><a href="privacy.html">Privacy Policy</a><span style="color:var(--muted)">© 2026 Maison Moi</span></footer>
 </body>
 </html>
