@@ -287,8 +287,13 @@ async function cloudSignOut(){
   if (S._unsynced) await cloudPush();
   if (S._unsynced && !confirm("Some changes haven't synced yet and will be lost. Sign out anyway?")) return;
   await CLOUD.db.auth.signOut();
-  localStorage.removeItem(LS_KEY);
+  cloudForget();
   location.reload();
+}
+// Removes every Maison Moi copy from this browser: the closet, the device backup and uploaded photos waiting in IndexedDB.
+function cloudForget(){
+  Object.keys(localStorage).filter(k => k === LS_KEY || k.startsWith(LS_KEY + '.')).forEach(k => localStorage.removeItem(k));
+  try { indexedDB.deleteDatabase('closetStudio'); } catch(e){}
 }
 // Deletes the account for good: Stripe customer (any subscription stops at once), photos, closet, then this browser's copies.
 async function cloudDeleteAccount(){
@@ -301,8 +306,7 @@ async function cloudDeleteAccount(){
   if (error || !data || !data.deleted) return toast("Couldn't delete your account. Try again, or email jackie@maisonmoi.app.");
   clearTimeout(CLOUD.t); CLOUD.user = null;
   await CLOUD.db.auth.signOut({scope:'local'}).catch(() => {});
-  [LS_KEY, LS_KEY + '.device-backup'].forEach(k => localStorage.removeItem(k));
-  try { indexedDB.deleteDatabase('closetStudio'); } catch(e){}
+  cloudForget();
   alert('Your Maison Moi account and everything in it has been deleted.');
   location.reload();
 }

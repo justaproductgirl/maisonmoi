@@ -38,7 +38,7 @@ a{color:var(--ink)}
 <div class="card">
 <div class="eyebrow">Maison Moi</div>
 <h1>Privacy Policy</h1>
-<div class="updated">Last updated October 13, 2026</div>
+<div class="updated">Last updated October 14, 2026</div>
 
 <p class="lead">Maison Moi is a personal wardrobe app. Your closet is personal, so we keep this simple: we collect what the app needs to work, we never sell it, and you can take it with you or delete it.</p>
 
@@ -49,7 +49,7 @@ a{color:var(--ink)}
   <li><b>Your closet.</b> The pieces you add and their details (brand, color, size, price, condition, notes), photos you upload, what you wear, laundry status and the outfits you like or skip.</li>
   <li><b>Your inspiration.</b> Links, Pinterest boards and saved looks you add.</li>
   <li><b>Your calendar, only if you import one.</b> Event titles, times and locations from a calendar file you choose, used to plan outfits for your day. You can clear it anytime.</li>
-  <li><b>Your plan.</b> If you subscribe to Maison Moi Plus, Stripe handles your payment. We receive your plan status, trial and renewal dates and a Stripe customer ID. We never see or store your card number.</li>
+  <li><b>Your plan.</b> If you subscribe to Maison Moi Plus, Stripe handles your payment as the seller of record. We receive your plan status, trial and renewal dates and a Stripe customer ID. We never see or store your card number.</li>
   <li><b>Basic technical information.</b> Like most websites, the services that host Maison Moi may log your IP address and browser type for security and to keep things running.</li>
 </ul>
 
@@ -67,19 +67,20 @@ a{color:var(--ink)}
   <thead><tr><th>Service</th><th>What it does</th><th>What it receives</th></tr></thead>
   <tbody>
     <tr><td>Supabase</td><td>Accounts, database and photo storage</td><td>Your account and everything you save in the app</td></tr>
-    <tr><td>Stripe</td><td>Payments for Maison Moi Plus</td><td>Your email and payment details, entered directly with Stripe</td></tr>
+    <tr><td>Stripe</td><td>Seller of record for Maison Moi Plus: takes payment, handles sales tax and sends receipts</td><td>Your email, billing address and payment details, entered directly with Stripe, which uses them under <a href="https://stripe.com/privacy" target="_blank" rel="noopener">its own privacy policy</a></td></tr>
     <tr><td>GitHub Pages</td><td>Hosts the website</td><td>Standard web request information, such as your IP address</td></tr>
     <tr><td>Zippopotam.us</td><td>Turns your zip code into a city</td><td>Your zip code</td></tr>
     <tr><td>Cloudflare Turnstile</td><td>Checks that people creating an account or signing in aren't bots</td><td>Standard web request and browser information on the sign-in screen, under <a href="https://www.cloudflare.com/turnstile-privacy-policy/" target="_blank" rel="noopener">its own privacy policy</a></td></tr>
     <tr><td>Open-Meteo</td><td>Your daily weather forecast</td><td>The approximate location of your zip code</td></tr>
-    <tr><td>Google Fonts and jsDelivr</td><td>Fonts and app code</td><td>Standard web request information</td></tr>
+    <tr><td>Google Fonts</td><td>Fonts</td><td>Standard web request information</td></tr>
+    <tr><td>Stores you import from</td><td>When you paste a product link, your browser reads that product's details and photo straight from the store's website</td><td>Standard web request information, sent only to the store whose link you pasted</td></tr>
     <tr><td>Pinterest</td><td>Shows boards you add, only if you add them</td><td>Standard web request information</td></tr>
   </tbody>
 </table>
 <p>Shop links open other sites such as Poshmark, Depop and Google Shopping. Their own privacy policies apply once you're there.</p>
 
 <h2>Storage on your device</h2>
-<p>Maison Moi keeps a copy of your closet in your browser's local storage so it opens instantly and works offline, plus a sign-in token so you stay signed in. Signing out removes them. We don't use advertising cookies.</p>
+<p>Maison Moi keeps a copy of your closet in your browser's local storage so it opens instantly and works offline, plus a sign-in token so you stay signed in. Signing out removes them, along with any other Maison Moi data saved in that browser. We don't use advertising cookies.</p>
 
 <h2>Who can see your information</h2>
 <p>Only you, through your account. Security rules in our database stop any account from reading anyone else's closet, and your photos are kept in private storage. Maison Moi's owner can access account data when needed for support, security or legal reasons, and never for advertising.</p>
@@ -88,7 +89,7 @@ a{color:var(--ink)}
 <ul>
   <li>We keep your information while your account is open.</li>
   <li>You can delete any piece, photo or calendar import in the app at any time.</li>
-  <li>You can delete your whole account yourself in the app (Profile, then Delete my account). This immediately deletes your account, closet and photos, ends any Plus subscription, and clears the copy on that browser. You can also email us from your account's email address and we'll do it within 30 days. Copies in routine backups expire within 30 days after that.</li>
+  <li>You can delete your whole account yourself in the app (Profile, then Delete my account). This immediately deletes your account, closet and photos, ends any Plus subscription, and clears the copy on that browser. You can also email us from your account's email address and we'll do it within 30 days. Any copies in backups expire within 30 days after that.</li>
   <li>Stripe keeps billing records for as long as the law requires.</li>
 </ul>
 
