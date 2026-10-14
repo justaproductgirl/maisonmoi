@@ -237,7 +237,7 @@ body.setup main{max-width:none;padding:0}
 .setup-hero h1{font-size:46px;line-height:1.08;margin:56px 0 14px;max-width:460px}
 .setup-hero p{color:rgba(255,255,255,.78);max-width:420px;font-size:16px;margin:0}
 .collage{position:relative;flex:1;min-height:280px;margin-top:30px}
-.collage img{position:absolute;width:150px;border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.35);border:5px solid var(--card)}
+.collage img{position:absolute;width:150px;aspect-ratio:4/5;object-fit:cover;border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.35);border:5px solid var(--card)}
 .setup-form{padding:48px 56px;max-width:640px;width:100%;margin:0 auto;align-self:center}
 .setup-form h2{font-size:28px}
 .au-seg{margin-bottom:26px}.au-seg button{padding:12px 6px}
@@ -867,13 +867,13 @@ function viewSetup(){
   const goals = p.goals || ['existing'];
   const links = (p.links || DEFAULT_INSPO).join('\n');
   const loc = UI.loc || (p.city ? p : null);
-  const pics = [['dress','print',8,6,-8],['top','cream',44,0,6],['outerwear','camel',4,52,4],['shoes','white',52,52,-5],['bottom','denim',78,18,9],['accessory','brown',30,30,-3]];
+  const pics = [['dress',8,6,-8],['top',44,0,6],['coat',4,52,4],['sneakers',52,52,-5],['jeans',78,18,9],['bag',30,30,-3]];
   return `<div class="setup-wrap">
     <div class="setup-hero">
       <div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div>
       <h1>Your closet, styled for the day you're actually having.</h1>
       <p>Tell me a little about you. I'll check your local weather, learn your style from your inspiration, and start pulling outfits from what you already own.</p>
-      <div class="collage">${pics.map(([c, col, x, y, r]) => `<img src="${garmentSVG(c, col)}" style="left:${x}%;top:${y}%;transform:rotate(${r}deg)">`).join('')}</div>
+      <div class="collage">${pics.map(([f, x, y, r]) => `<img src="art/${f}.jpg" alt="" style="left:${x}%;top:${y}%;transform:rotate(${r}deg)">`).join('')}</div>
     </div>
     <div class="setup-form">
       <h2>${first ? "Let's set up your closet" : 'Edit your profile'}</h2>
