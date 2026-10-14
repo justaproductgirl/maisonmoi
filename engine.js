@@ -79,6 +79,8 @@ function scoreItem(it, ctx, prof, opts = {}){
   }
   if (hasGoal('existing') && daysSince(it.lastWorn || it.addedAt) > 30) s += .6;
   if (opts.used) s -= (opts.used[it.id] || 0) * 2.2;
+  if (opts.seen) s -= (opts.seen[it.id] || 0) * 1.1;
+  if (opts.recent) s -= opts.recent[it.id] || 0;
   if (opts.keep && opts.keep.includes(it.id)) s += 1.4;
   s += Math.random() * 0.35;
   return s;
@@ -131,22 +133,42 @@ function baseScore(it, knit, ctx, prof, opts){
   return s;
 }
 function bestBase(knit, ctx, prof, opts){
-  let b = null, bs = -Infinity;
-  S.items.filter(i => i.category === 'top' && i.id !== knit.id).forEach(i => { const s = baseScore(i, knit, ctx, prof, opts); if (s > bs){ bs = s; b = i; } });
-  return b ? {item:b, score:bs} : null;
+  return pickFrom(S.items.filter(i => i.category === 'top' && i.id !== knit.id).map(i => ({item:i, score:baseScore(i, knit, ctx, prof, opts)})), opts);
+}
+
+/* ---- Variety ----
+   Rather than always taking the single top scorer (which brings the same pieces back every shuffle), pick at random
+   among the pieces close to the best, weighted toward the higher scores. opts.exact turns this off. */
+const PICK_MARGIN = 1.2, PICK_TEMP = .5;
+function pickFrom(cands, opts = {}){
+  cands = cands.filter(c => c.score > -Infinity);
+  if (!cands.length) return null;
+  const top = Math.max(...cands.map(c => c.score));
+  if (opts.exact) return cands.find(c => c.score === top);
+  const pool = cands.filter(c => c.score >= top - PICK_MARGIN).map(c => ({c, w:Math.exp((c.score - top) / PICK_TEMP)}));
+  let r = Math.random() * pool.reduce((a, p) => a + p.w, 0);
+  for (const p of pool){ r -= p.w; if (r <= 0) return p.c; }
+  return pool[pool.length - 1].c;
+}
+// Pieces worn in the last three days rest a little: 1.2 for yesterday, fading out after that.
+function recentWears(date){
+  const out = {}, day = new Date(date + 'T12:00');
+  (S.log || []).forEach(l => {
+    const ago = Math.round((day - new Date(l.date + 'T12:00')) / 864e5);
+    if (ago >= 1 && ago <= 3) l.itemIds.forEach(id => out[id] = Math.max(out[id] || 0, [0, 1.2, .7, .3][ago]));
+  });
+  return out;
 }
 
 // Hats only make sense when the day has you outside for a while.
 const OUTDOOR_MOMENTS = ['errands','workout','travel'];
 function best(cat, ctx, prof, opts, against = [], ok = () => true){
-  let b = null, bs = -Infinity;
   const outdoors = ctx.moments.some(m => OUTDOOR_MOMENTS.includes(m));
-  S.items.filter(i => i.category === cat && (outdoors || !isHat(i)) && ok(i)).forEach(i => {
+  return pickFrom(S.items.filter(i => i.category === cat && (outdoors || !isHat(i)) && ok(i)).map(i => {
     let s = scoreItem(i, ctx, prof, opts);
     against.forEach(a => s -= colorPenalty(a, i, prof));
-    if (s > bs){ bs = s; b = i; }
-  });
-  return b ? {item:b, score:bs} : null;
+    return {item:i, score:s};
+  }), opts);
 }
 function compose(ctx, prof, opts = {}){
   const top = best('top', ctx, prof, opts);
@@ -188,20 +210,33 @@ function generatePlan(){
   const prof = styleProfile();
   const moments = dayMoments(S.day);
   const ctx = ctxFor(moments, S.day);
-  const used = {}, options = [], seen = new Set();
-  for (let i = 0; i < 6 && options.length < 3; i++){
-    const o = compose(ctx, prof, {used});
+  // Shuffle memory: pieces shown in recent shuffles of the same day sit out a little, fading each shuffle.
+  const key = [S.day.date, moments.join(','), ctx.weather, ctx.c].join('|');
+  const shown = S.shown && S.shown.key === key ? S.shown.seen : {};
+  const seen = Object.fromEntries(Object.entries(shown).map(([id, n]) => [id, n * .6]).filter(([, n]) => n > .1));
+  const opts = {used:{}, seen, recent:recentWears(S.day.date)};
+  // Three looks that differ in at least two main pieces (top, bottom, dress, shoes, outerwear) when the closet allows.
+  const MAIN = ['top', 'bottom', 'dress', 'shoes', 'outer'], mains = o => MAIN.map(k => o.parts[k]).filter(Boolean);
+  const options = [];
+  for (let i = 0; i < 12 && options.length < 3; i++){
+    const o = compose(ctx, prof, opts);
     if (!o) break;
-    const sig = Object.values(o.parts).sort().join('|');
-    Object.values(o.parts).forEach(id => used[id] = (used[id] || 0) + 1);
-    if (seen.has(sig)) continue;
-    seen.add(sig); options.push(o);
+    Object.values(o.parts).forEach(id => opts.used[id] = (opts.used[id] || 0) + 1);
+    const m = mains(o), need = i < 8 ? 2 : 1;
+    if (options.some(p => m.filter(id => !mains(p).includes(id)).length < need)) continue;
+    options.push(o);
   }
+  // The match score shows how well a look fits the day, not the variety nudges that helped choose it.
+  options.forEach(o => { const ps = Object.entries(o.parts).filter(([k]) => !SUPPORT_PARTS.includes(k)).map(([, id]) => byId(id));
+    o.score = ps.reduce((a, i) => a + scoreItem(i, ctx, prof), 0) / ps.length; });
+  options.sort((a, b) => b.score - a.score);
+  options.forEach(o => mains(o).forEach(id => seen[id] = (seen[id] || 0) + 1));
+  S.shown = {key, seen};
   let perMoment = [];
   if (options.length && moments.length > 1){
     const keep = Object.values(options[0].parts);
     perMoment = moments.map(m => {
-      const o = compose(ctxFor([m], S.day), prof, {keep});
+      const o = compose(ctxFor([m], S.day), prof, {keep, exact:true});
       return o ? {m, parts:o.parts} : null;
     }).filter(Boolean);
   }

@@ -18,7 +18,7 @@ const PHOTO_BUCKET = 'closet-photos';
 // until captcha is switched on there, so this code is safe to ship first. Most people never see it: a box appears only if Cloudflare is unsure.
 const TURNSTILE_SITE_KEY = '0x4AAAAAAFWsOJYDgvDX4Q06';
 const CAPTCHA = {id:null, token:'', wait:null, loading:null};
-const DEVICE_ONLY = ['items', 'tab', 'weather', 'cloudUser', 'cloudRev', '_unsynced', 'localOnly', 'sub']; // never copied into closet_state
+const DEVICE_ONLY = ['items', 'tab', 'weather', 'cloudUser', 'cloudRev', '_unsynced', 'localOnly', 'sub', 'shown']; // never copied into closet_state
 const CLOUD = {db:null, user:null, checked:false, busy:false, again:false, t:0, retry:0, status:'', at:0, msg:'',
   sent:{items:{}, state:'', profile:''}, signed:{}};
 
