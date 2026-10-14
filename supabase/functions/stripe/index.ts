@@ -9,7 +9,8 @@ import Stripe from 'npm:stripe@17';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const env = (k: string) => (Deno.env.get(k) || '').trim(); // pasted secrets often pick up a stray space or newline
-const stripe = new Stripe(env('STRIPE_SECRET_KEY'), { httpClient: Stripe.createFetchHttpClient() });
+// Pinned to the webhook's API version; Managed Payments (Stripe as seller of record) needs 2025-03-31 or later.
+const stripe = new Stripe(env('STRIPE_SECRET_KEY'), { apiVersion: '2026-09-30.endive' as any, httpClient: Stripe.createFetchHttpClient() });
 // Server-side key: the classic service role key, or the newer sb_secret_ key on projects that use the new key system.
 const serverKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}').default;
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serverKey);
