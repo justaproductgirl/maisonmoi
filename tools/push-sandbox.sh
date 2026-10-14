@@ -19,5 +19,5 @@ git update-index --add --cacheinfo 100644,$(echo sandbox.maisonmoi.app | git has
 git update-index --add --cacheinfo 100644,$(printf 'User-agent: *\nDisallow: /\n' | git hash-object -w --stdin),robots.txt
 commit=$(git commit-tree $(git write-tree) -p HEAD -m "Sandbox build of $(git rev-parse --short HEAD)")
 
-git -c core.sshCommand="ssh -F /dev/null -i $KEY -o IdentitiesOnly=yes -o IdentityAgent=none" push -f -q $REMOTE $commit:refs/heads/main
+git -c core.sshCommand="ssh -F /dev/null -i $KEY -o IdentitiesOnly=yes -o IdentityAgent=none" push -f -q $REMOTE "${commit}:refs/heads/main"
 echo "Sandbox updated with $(git log -1 --format='%h %s' HEAD). Live at https://sandbox.maisonmoi.app in about a minute."
