@@ -9,7 +9,7 @@
 // Under construction: maisonmoi.app shows construction.html instead of the app. The sandbox and local copies are unaffected.
 // Open maisonmoi.app/?preview=on once to use the real app on that browser (?preview=off to see the construction page again).
 // To reopen the site, set this to false and push.
-const UNDER_CONSTRUCTION = true;
+const UNDER_CONSTRUCTION = false;
 (() => {
   const q = new URLSearchParams(location.search).get('preview');
   try { if (q === 'on') localStorage.setItem('mm-preview', '1'); if (q === 'off') localStorage.removeItem('mm-preview'); } catch (_) { /* private mode */ }
