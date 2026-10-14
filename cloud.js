@@ -91,16 +91,20 @@ function planInfo(){
   if (s.status === 'active') return {label:s.cancel_at_period_end ? `You're on Plus until ${day(s.current_period_end)}. It won't renew.` : `You're on Plus. Next bill ${day(s.current_period_end)}.`, manage:true};
   return {label:"You're on Free.", manage:false};
 }
-async function billing(fn){
+async function billing(action){
   if (!CLOUD.user){ toast('Sign in first'); return; }
   try {
-    const {data, error} = await CLOUD.db.functions.invoke(fn, {body:{return_url:location.href.split('#')[0]}});
+    const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action, return_url:location.href.split('#')[0]}});
     if (error || !data || !data.url) throw error || new Error('no url');
     location.href = data.url;
   } catch(e){ toast("Checkout isn't connected yet. Stripe is the next step."); }
 }
-const cloudCheckout = () => billing('create-checkout');
-const cloudPortal = () => billing('customer-portal');
+const cloudCheckout = () => billing('checkout');
+const cloudPortal = () => billing('portal');
+if (/[?&]plus=welcome/.test(location.search)){ // back from Stripe Checkout
+  history.replaceState(null, '', location.pathname);
+  setTimeout(async () => { toast('Welcome to Plus ✦'); if (CLOUD.user){ await loadPlan(); render(); } }, 2500);
+}
 
 /* ---- Push: save changes to your account. Only items that changed are sent. ---- */
 function cloudQueue(){
