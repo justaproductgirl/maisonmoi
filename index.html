@@ -955,7 +955,7 @@ function viewUpgrade(){
   const cta = plus ? (sub.manage ? '<button class="btn primary" data-action="manage-sub">Manage subscription</button>' : '')
     : CLOUD.user ? `<button class="btn primary" data-action="start-trial">Start your ${PLUS.trialDays}-day free trial</button>`
     : '<button class="btn primary" data-action="auth-signin">Sign in to start your free trial</button>';
-  const rows = [['Closet pieces', FREE.items, 'Unlimited'], ['Outfit restyles', FREE.restyles + ' a day', 'Unlimited'], ['Themes', 'Little Black Dress', `All ${Object.keys(THEMES).length}`],
+  const rows = [['Closet pieces', FREE.items, 'Unlimited'], ['Outfit restyles', FREE.restyles + '/day', 'Unlimited'], ['Themes', 'Little Black Dress', `All ${Object.keys(THEMES).length}`],
     ['Daily outfit with your forecast', '✓', '✓'], ['Laundry, Resell and Library', '✓', '✓'], ['Sync across your devices', '✓', '✓']];
   return `<button class="crumb" data-action="tab" data-tab="profile">← Profile</button>
   ${reason ? `<div class="banner"><span>✦ ${reason}</span></div>` : ''}
