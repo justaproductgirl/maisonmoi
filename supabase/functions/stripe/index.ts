@@ -7,7 +7,8 @@
 import Stripe from 'npm:stripe@17';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { httpClient: Stripe.createFetchHttpClient() });
+const env = (k: string) => (Deno.env.get(k) || '').trim(); // pasted secrets often pick up a stray space or newline
+const stripe = new Stripe(env('STRIPE_SECRET_KEY'), { httpClient: Stripe.createFetchHttpClient() });
 // Server-side key: the classic service role key, or the newer sb_secret_ key on projects that use the new key system.
 const serverKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}').default;
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serverKey);
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
 
 async function webhook(req: Request) {
   const event = await stripe.webhooks.constructEventAsync(await req.text(), req.headers.get('stripe-signature')!,
-    Deno.env.get('STRIPE_WEBHOOK_SECRET')!, undefined, Stripe.createSubtleCryptoProvider());
+    env('STRIPE_WEBHOOK_SECRET'), undefined, Stripe.createSubtleCryptoProvider());
   const o = event.data.object as any;
   if (event.type === 'checkout.session.completed' && o.subscription) await save(await stripe.subscriptions.retrieve(o.subscription), o.client_reference_id);
   if (event.type.startsWith('customer.subscription.')) await save(o);
