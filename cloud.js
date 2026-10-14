@@ -112,7 +112,11 @@ async function billing(action){
     const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action, return_url:location.href.split('#')[0]}});
     if (error || !data || !data.url) throw error || new Error('no url');
     location.href = data.url;
-  } catch(e){ toast("Checkout isn't connected yet. Stripe is the next step."); }
+  } catch(e){
+    toast(!navigator.onLine ? "You're offline. Connect to the internet and try again."
+      : action === 'portal' ? "Couldn't open your billing page. Please try again in a minute."
+      : "Couldn't open checkout. Please try again in a minute.");
+  }
 }
 const cloudCheckout = () => billing('checkout');
 const cloudPortal = () => billing('portal');
@@ -169,9 +173,26 @@ async function cloudPush(loud){
     if (CLOUD.again){ CLOUD.again = false; cloudQueue(); }
   }
 }
-const cloudErr = e => /fetch|network/i.test(e.message || '') ? "You're offline. Changes are saved in this browser and will sync when you're back."
-  : /schema cache|does not exist/i.test(e.message || '') ? 'Your Supabase tables are not set up yet (run supabase/schema.sql).'
-  : `Couldn't sync: ${e.message || e}`;
+// Plain-English versions of sync errors. The database's own limit messages are already written for people, so they pass through.
+const cloudErr = e => {
+  const m = (e && e.message) || String(e || '');
+  console.warn('Maison Moi sync:', e);
+  if (/fetch|network|offline/i.test(m)) return "You're offline. Changes are saved in this browser and will sync when you're back.";
+  if (/Free closet holds|sample closet holds|Upgrade to Maison Moi Plus/i.test(m)) return m;
+  if (/payload too large|too large|exceeded the maximum/i.test(m)) return 'That photo is too big. Photos can be up to 5MB.';
+  if (/JWT|session|not authenticated|401/i.test(m)) return 'You were signed out. Sign in again to keep syncing.';
+  return "Couldn't sync just now. Your changes are safe in this browser and we'll keep trying.";
+};
+// Plain-English versions of sign-in errors from Supabase Auth.
+const authErr = m => /rate limit|too many/i.test(m) ? 'Too many tries. Please wait a few minutes and try again.'
+  : /only request this after (\d+)/i.test(m) ? `For security, please wait ${m.match(/after (\d+)/i)[1]} seconds and try again.`
+  : /already registered|already exists/i.test(m) ? 'That email already has an account. Choose Sign in above.'
+  : /weak|pwned|leaked|known to be/i.test(m) ? 'That password has shown up in a data breach. Please choose a different one.'
+  : /password/i.test(m) && /characters|short/i.test(m) ? 'Passwords need at least 8 characters.'
+  : /invalid.*email|email.*invalid/i.test(m) ? 'That email address doesn\'t look right.'
+  : /captcha/i.test(m) ? 'Please complete the security check and try again.'
+  : /fetch|network/i.test(m) ? "You're offline. Connect to the internet and try again."
+  : 'Something went wrong. Please try again in a minute.';
 
 /* ---- Photos: local files (images/ on this Mac, or photos you uploaded) move into storage, then display via signed links ---- */
 async function readPhoto(src){
@@ -269,7 +290,7 @@ async function cloudAuth(kind){
     say('Sending...', true);
     const {error} = await CLOUD.db.auth.resetPasswordForEmail(email, {redirectTo:redirect, captchaToken:await captchaToken(say)});
     if (error && /captcha/i.test(error.message)) return say(BOT_MSG);
-    return say(error ? error.message : 'Check your email for a link to reset your password.', !error);
+    return say(error ? authErr(error.message) : 'Check your email for a link to reset your password.', !error);
   }
   if (pass.length < 8) return say('Passwords need at least 8 characters.');
   say(kind === 'up' ? 'Creating your account...' : 'Signing in...', true);
@@ -279,7 +300,7 @@ async function cloudAuth(kind){
     : await CLOUD.db.auth.signInWithPassword({email, password:pass, options:{captchaToken:token}});
   if (error && /captcha/i.test(error.message)) return say(BOT_MSG);
   if (error && kind === 'in' && /invalid/i.test(error.message)) return say("That email and password don't match. New here? Choose Create account above.");
-  if (error) return say(/confirm/i.test(error.message) ? 'Confirm your email first (check your inbox), then sign in.' : error.message);
+  if (error) return say(/confirm/i.test(error.message) ? 'Confirm your email first (check your inbox), then sign in.' : authErr(error.message));
   if (kind === 'up' && !data.session){ UI.authMode = 'in'; say('Almost there! Check your email for a link to confirm your account, then sign in here.', true); return render(); }
 }
 async function cloudSignOut(){

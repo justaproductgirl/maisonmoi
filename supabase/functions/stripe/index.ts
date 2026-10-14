@@ -83,8 +83,8 @@ Deno.serve(async (req) => {
     }
     return json({ error: 'Unknown action' }, 400);
   } catch (e) {
-    console.error(e);
-    return json({ error: String((e as Error).message || e) }, 500);
+    console.error(e); // the details stay in the function logs; people see a plain message
+    return json({ error: 'Something went wrong on our side. Please try again in a minute.' }, 500);
   }
 });
 
