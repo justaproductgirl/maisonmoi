@@ -552,6 +552,7 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 .setup-wrap > *{min-width:0}
 @media (max-width:520px){.plan-teaser{grid-template-columns:1fr}.setup-hero h1{font-size:36px;letter-spacing:-1px}.setup-form{padding:32px 22px}}
 .au-msg{min-height:18px;margin-top:10px;font-size:13px}
+.au-captcha:not(:empty){margin-top:12px}
 .au-msg.ok{color:var(--muted)}.au-msg.bad{color:#b8343b}
 </style>
 </head>
@@ -854,7 +855,7 @@ function eventsFor(date){
 /* ============ Views ============ */
 function render(){
   document.documentElement.dataset.theme = themeOn();
-  if (cloudGate()){ document.body.classList.add('setup'); $('#view').innerHTML = viewAuth(); return; }
+  if (cloudGate()){ document.body.classList.add('setup'); $('#view').innerHTML = viewAuth(); if (CLOUD.checked) captchaMount(); return; }
   const setup = !(S.profile && S.profile.done) || !!UI.editProfile;
   document.body.classList.toggle('setup', setup);
   if (setup){ $('#view').innerHTML = viewSetup(); return; }

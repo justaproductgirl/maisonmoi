@@ -13,6 +13,11 @@ const CLOUD_URL = ENVS[ENV].url, CLOUD_KEY = ENVS[ENV].key;
 if (ENV === 'sandbox') addEventListener('DOMContentLoaded', () => document.body.insertAdjacentHTML('beforeend',
   '<div style="position:fixed;left:10px;bottom:10px;z-index:9999;background:#ffd400;color:#000;font:700 11px/1 monospace;letter-spacing:1px;padding:7px 9px;border:1.5px solid #000;pointer-events:none">SANDBOX · TEST DATA</div>'));
 const PHOTO_BUCKET = 'closet-photos';
+// Cloudflare Turnstile (bot check) on sign up, sign in and password reset. One widget covers maisonmoi.app, the sandbox
+// and localhost; the secret lives only in each Supabase project (Auth > Attack Protection). Supabase ignores the token
+// until captcha is switched on there, so this code is safe to ship first. Most people never see it: a box appears only if Cloudflare is unsure.
+const TURNSTILE_SITE_KEY = '0x4AAAAAAFWsOJYDgvDX4Q06';
+const CAPTCHA = {id:null, token:'', wait:null, loading:null};
 const DEVICE_ONLY = ['items', 'tab', 'weather', 'cloudUser', 'cloudRev', '_unsynced', 'localOnly', 'sub']; // never copied into closet_state
 const CLOUD = {db:null, user:null, checked:false, busy:false, again:false, t:0, retry:0, status:'', at:0, msg:'',
   sent:{items:{}, state:'', profile:''}, signed:{}};
@@ -221,6 +226,38 @@ async function signPhotos(){
   }
 }
 
+/* ---- Bot check ---- */
+function captchaLoad(){
+  return CAPTCHA.loading ||= new Promise(ok => {
+    const s = document.createElement('script');
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    s.onload = () => ok(true); s.onerror = () => { CAPTCHA.loading = null; ok(false); };
+    document.head.appendChild(s);
+  });
+}
+// Called after each render of the sign-in screen: that render replaced the old box, so draw a fresh one.
+async function captchaMount(){
+  if (!(await captchaLoad()) || !window.turnstile) return;
+  const box = $('#au-captcha'); if (!box || box.childElementCount) return;
+  if (CAPTCHA.id !== null) try { turnstile.remove(CAPTCHA.id); } catch(e){}
+  CAPTCHA.token = '';
+  CAPTCHA.id = turnstile.render(box, {sitekey:TURNSTILE_SITE_KEY, appearance:'interaction-only', size:'flexible', action:'auth',
+    callback: t => { CAPTCHA.token = t; if (CAPTCHA.wait) CAPTCHA.wait(t); },
+    'expired-callback': () => { CAPTCHA.token = ''; },
+    'error-callback': () => { CAPTCHA.token = ''; if (CAPTCHA.wait) CAPTCHA.wait(''); }});
+}
+// A token works once, so each attempt takes the current one and the widget fetches the next.
+// If Turnstile can't load (blocked or offline) this returns nothing and Supabase decides.
+async function captchaToken(){
+  await captchaMount();
+  if (!window.turnstile || CAPTCHA.id === null) return undefined;
+  const t = CAPTCHA.token || await new Promise(ok => { CAPTCHA.wait = ok; setTimeout(() => ok(CAPTCHA.token), 60e3); });
+  CAPTCHA.wait = null; CAPTCHA.token = '';
+  try { turnstile.reset(CAPTCHA.id); } catch(e){}
+  return t || undefined;
+}
+const BOT_MSG = "We couldn't confirm you're not a bot. Finish the check above the button, or refresh the page and try again.";
+
 /* ---- Sign in / sign up / sign out ---- */
 async function cloudAuth(kind){
   const email = ($('#au-email') || {}).value.trim(), pass = ($('#au-pass') || {}).value;
@@ -228,14 +265,18 @@ async function cloudAuth(kind){
   if (!/^\S+@\S+\.\S+$/.test(email)) return say('Enter your email address.');
   const redirect = /^https?:/.test(location.href) ? location.href.split('#')[0] : undefined;
   if (kind === 'reset'){
-    const {error} = await CLOUD.db.auth.resetPasswordForEmail(email, {redirectTo:redirect});
+    say('Sending...', true);
+    const {error} = await CLOUD.db.auth.resetPasswordForEmail(email, {redirectTo:redirect, captchaToken:await captchaToken()});
+    if (error && /captcha/i.test(error.message)) return say(BOT_MSG);
     return say(error ? error.message : 'Check your email for a link to reset your password.', !error);
   }
   if (pass.length < 8) return say('Passwords need at least 8 characters.');
   say(kind === 'up' ? 'Creating your account...' : 'Signing in...', true);
+  const token = await captchaToken();
   const {data, error} = kind === 'up'
-    ? await CLOUD.db.auth.signUp({email, password:pass, options:{emailRedirectTo:redirect}})
-    : await CLOUD.db.auth.signInWithPassword({email, password:pass});
+    ? await CLOUD.db.auth.signUp({email, password:pass, options:{emailRedirectTo:redirect, captchaToken:token}})
+    : await CLOUD.db.auth.signInWithPassword({email, password:pass, options:{captchaToken:token}});
+  if (error && /captcha/i.test(error.message)) return say(BOT_MSG);
   if (error && kind === 'in' && /invalid/i.test(error.message)) return say("That email and password don't match. New here? Choose Create account above.");
   if (error) return say(/confirm/i.test(error.message) ? 'Confirm your email first (check your inbox), then sign in.' : error.message);
   if (kind === 'up' && !data.session){ UI.authMode = 'in'; say('Almost there! Check your email for a link to confirm your account, then sign in here.', true); return render(); }
@@ -299,6 +340,7 @@ function viewAuth(){
       <p class="muted small">${m === 'up' ? `New here? Start free with any email. We'll send a link to confirm it.` : 'Sign in to pick up where you left off.'}</p>
       <label class="lbl">Email</label><input class="input" id="au-email" type="email" autocomplete="email" value="${esc(UI.authEmail || '')}">
       <label class="lbl">Password</label><input class="input" id="au-pass" type="password" autocomplete="${m === 'up' ? 'new-password' : 'current-password'}" placeholder="${m === 'up' ? 'Choose at least 8 characters' : 'Your password'}">
+      <div id="au-captcha" class="au-captcha"></div>
       <div class="au-msg ${UI.authOk ? 'ok' : UI.authMsg ? 'bad' : ''}" id="au-msg">${esc(UI.authMsg || '')}</div>
       <button class="btn primary au-go" data-action="${m === 'up' ? 'auth-up' : 'auth-in'}">${m === 'up' ? 'Create free account' : 'Sign in'}</button>
       ${m === 'up'
