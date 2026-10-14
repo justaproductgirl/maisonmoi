@@ -196,7 +196,7 @@ async function signPhotos(){
 /* ---- Sign in / sign up / sign out ---- */
 async function cloudAuth(kind){
   const email = ($('#au-email') || {}).value.trim(), pass = ($('#au-pass') || {}).value;
-  const say = (m, ok) => { const e = $('#au-msg'); if (e){ e.textContent = m; e.className = 'au-msg ' + (ok ? 'ok' : 'bad'); } };
+  const say = (m, ok) => { UI.authMsg = m; UI.authOk = !!ok; UI.authEmail = email; const e = $('#au-msg'); if (e){ e.textContent = m; e.className = 'au-msg ' + (ok ? 'ok' : 'bad'); } };
   if (!/^\S+@\S+\.\S+$/.test(email)) return say('Enter your email address.');
   const redirect = /^https?:/.test(location.href) ? location.href.split('#')[0] : undefined;
   if (kind === 'reset'){
@@ -208,8 +208,9 @@ async function cloudAuth(kind){
   const {data, error} = kind === 'up'
     ? await CLOUD.db.auth.signUp({email, password:pass, options:{emailRedirectTo:redirect}})
     : await CLOUD.db.auth.signInWithPassword({email, password:pass});
+  if (error && kind === 'in' && /invalid/i.test(error.message)) return say("That email and password don't match. New here? Choose Create account above.");
   if (error) return say(/confirm/i.test(error.message) ? 'Confirm your email first (check your inbox), then sign in.' : error.message);
-  if (kind === 'up' && !data.session) return say('Almost there! Check your email to confirm your account, then sign in here.', true);
+  if (kind === 'up' && !data.session){ UI.authMode = 'in'; say('Almost there! Check your email for a link to confirm your account, then sign in here.', true); return render(); }
 }
 async function cloudSignOut(){
   if (!confirm('Sign out of Maison Moi on this browser? Your closet stays safe in your account.')) return;
@@ -235,23 +236,32 @@ function planTeaser(){
     ${plan('pt-plus', 'Plus', `$${PLUS.price}<span>/mo</span>`, `${PLUS.trialDays} days free, cancel anytime`, ['Unlimited closet pieces', 'Unlimited restyles', `All ${Object.keys(THEMES).length} themes`, 'Everything in Free'])}
   </div><p class="pt-foot">Start free, no card needed. Try Plus anytime from your Profile.</p>`;
 }
+const authMode = () => UI.authMode || (S.cloudUser ? 'in' : 'up'); // returning browsers start on Sign in
 function viewAuth(){
   if (!CLOUD.checked) return '<div class="setup-wrap"><div class="setup-hero"><div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div></div><div class="setup-form"></div></div>';
   return `<div class="setup-wrap">
     <div class="setup-hero">
       <div class="logo"><div class="mark" aria-hidden="true"></div>Maison Moi</div>
       <h1>Your closet, styled for the day you're actually having.</h1>
-      <p>Sign in to keep your closet, photos and outfits in your account, so they follow you to any device.</p>
+      <p>Your account keeps your closet, photos and outfits safe, so they follow you to any device.</p>
       ${planTeaser()}
     </div>
     <div class="setup-form au">
-      <h2>Welcome</h2><p class="muted small">Sign in, or create an account with any email.</p>
-      <label class="lbl">Email</label><input class="input" id="au-email" type="email" autocomplete="email">
-      <label class="lbl">Password</label><input class="input" id="au-pass" type="password" autocomplete="current-password" placeholder="At least 8 characters">
-      <div class="au-msg" id="au-msg"></div>
-      <div class="actions" style="margin-top:14px"><button class="btn primary" data-action="auth-in">Sign in</button><button class="btn" data-action="auth-up">Create account</button></div>
-      <p class="small" style="margin-top:14px"><a href="#" data-action="auth-reset">Forgot your password?</a></p>
-      <p class="small muted" style="margin-top:22px">Rather not make an account? <a href="#" data-action="auth-local">Keep everything on this browser</a>. You can sign in later from Profile.</p>
-      <p class="small muted" style="margin-top:10px">By creating an account you agree to our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+      ${(m => `<div class="seg au-seg" role="tablist">
+        <button role="tab" class="${m === 'up' ? 'on' : ''}" aria-selected="${m === 'up'}" data-action="auth-mode" data-mode="up">Create account</button>
+        <button role="tab" class="${m === 'in' ? 'on' : ''}" aria-selected="${m === 'in'}" data-action="auth-mode" data-mode="in">Sign in</button>
+      </div>
+      <h2>${m === 'up' ? 'Create your account' : 'Welcome back'}</h2>
+      <p class="muted small">${m === 'up' ? `New here? Start free with any email. We'll send a link to confirm it.` : 'Sign in to pick up where you left off.'}</p>
+      <label class="lbl">Email</label><input class="input" id="au-email" type="email" autocomplete="email" value="${esc(UI.authEmail || '')}">
+      <label class="lbl">Password</label><input class="input" id="au-pass" type="password" autocomplete="${m === 'up' ? 'new-password' : 'current-password'}" placeholder="${m === 'up' ? 'Choose at least 8 characters' : 'Your password'}">
+      <div class="au-msg ${UI.authOk ? 'ok' : UI.authMsg ? 'bad' : ''}" id="au-msg">${esc(UI.authMsg || '')}</div>
+      <button class="btn primary au-go" data-action="${m === 'up' ? 'auth-up' : 'auth-in'}">${m === 'up' ? 'Create free account' : 'Sign in'}</button>
+      ${m === 'up'
+        ? `<p class="small muted" style="margin-top:14px">By creating an account you agree to our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+      <p class="small" style="margin-top:14px">Already have an account? <a href="#" data-action="auth-mode" data-mode="in">Sign in</a></p>`
+        : `<p class="small" style="margin-top:14px"><a href="#" data-action="auth-reset">Forgot your password?</a></p>
+      <p class="small" style="margin-top:6px">New to Maison Moi? <a href="#" data-action="auth-mode" data-mode="up">Create an account</a></p>`}
+      <p class="small muted" style="margin-top:22px">Rather not make an account? <a href="#" data-action="auth-local">Keep everything on this browser</a>. You can sign in later from Profile.</p>`)(authMode())}
     </div></div>`;
 }

@@ -238,6 +238,8 @@ body.setup main{max-width:none;padding:0}
 .collage img{position:absolute;width:150px;border-radius:16px;box-shadow:0 18px 40px rgba(0,0,0,.35);border:5px solid var(--card)}
 .setup-form{padding:48px 56px;max-width:640px;width:100%;margin:0 auto;align-self:center}
 .setup-form h2{font-size:28px}
+.au-seg{margin-bottom:26px}.au-seg button{padding:12px 6px}
+.au-go{width:100%;margin-top:16px;padding:14px}
 .step{display:flex;align-items:center;gap:10px;margin:26px 0 8px;font-weight:600}
 .step .n{width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--accent-ink);display:grid;place-items:center;font-size:12px}
 .goals{display:grid;gap:10px}
@@ -2136,6 +2138,7 @@ document.addEventListener('click', async e => {
       el.classList.toggle('on'); generatePlan(); save(); render(); toast('Goals updated'); break;
     }
     case 'save-about': await saveAbout(el); break;
+    case 'auth-mode': e.preventDefault(); UI.authEmail = ($('#au-email') || {}).value || UI.authEmail; UI.authMode = el.dataset.mode; UI.authMsg = ''; render(); $('#au-email')?.focus(); break;
     case 'auth-in': await cloudAuth('in'); break;
     case 'auth-up': await cloudAuth('up'); break;
     case 'auth-reset': e.preventDefault(); await cloudAuth('reset'); break;
@@ -2288,7 +2291,7 @@ document.addEventListener('error', e => {
   if (!img.dataset.retry && /[?&]width=/.test(img.src)){ img.dataset.retry = 1; img.src = img.src.replace(/[?&]width=\d+/, ''); return; }
   console.warn('Image failed:', img.src); img.src = BROKEN;
 }, true);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); if (e.key === 'Enter' && e.target.closest('.au')) cloudAuth('in'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); if (e.key === 'Enter' && e.target.closest('.au')) cloudAuth(authMode()); });
 
 /* ============ Boot ============ */
 syncLibrary();
