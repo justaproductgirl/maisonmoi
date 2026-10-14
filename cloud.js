@@ -79,7 +79,7 @@ async function cloudPull(){
       cloudWrite();
       if (window.CLOSET_CATALOG && S.profile && S.profile.done && mergeCatalog()) save(); // pieces Claude added to catalog.js on this Mac
     }
-    await Promise.all([signPhotos(), loadPlan(), loadAdmin()]);
+    await Promise.all([signPhotos(), loadPlan(), loadPrices(), loadAdmin()]);
     CLOUD.status = 'saved'; CLOUD.at = CLOUD.pulledAt = Date.now();
     cleanPhotos().catch(() => {});
     if (!S.plan || S.plan.date !== S.day.date) generatePlan();
@@ -92,9 +92,20 @@ async function cloudPull(){
 
 /* ---- Plan: read your subscription, open Stripe Checkout or the billing portal ---- */
 async function loadPlan(){
-  const {data, error} = await CLOUD.db.from('subscriptions').select('status,trial_end,current_period_end,cancel_at_period_end').eq('user_id', CLOUD.user.id).maybeSingle();
+  const {data, error} = await CLOUD.db.from('subscriptions').select('status,price_id,trial_end,current_period_end,cancel_at_period_end').eq('user_id', CLOUD.user.id).maybeSingle();
   if (!error){ S.sub = data || {status:'free'}; cloudWrite(); } // on a network hiccup, keep the last known plan
 }
+// Live prices from Stripe (through the billing function), so a price change in Stripe shows up here without a code change.
+async function loadPrices(){
+  try {
+    const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action:'prices'}});
+    if (error || !data) return;
+    CLOUD.prices = data;
+    if (data.monthly) PLUS.price = data.monthly.amount / 100;
+    if (data.annual) PLUS.annual = data.annual.amount / 100;
+  } catch(e){}
+}
+const onAnnual = () => !!(CLOUD.prices && CLOUD.prices.annual && (S.sub || {}).price_id === CLOUD.prices.annual.id);
 async function loadAdmin(){
   const {data, error} = await CLOUD.db.rpc('admin_overview'); // the database says no unless you're in the admins table
   CLOUD.admin = error ? null : data; CLOUD.adminAt = Date.now();
@@ -102,14 +113,14 @@ async function loadAdmin(){
 function planInfo(){
   const s = S.sub || {}, day = d => d ? new Date(d).toLocaleDateString([], {month:'long', day:'numeric'}) : '';
   if (s.status === 'comped') return {label:"You have a founder's pass: Plus, on the house, for good.", manage:false};
-  if (s.status === 'trialing') return {label:`You're on your free trial of Plus${s.trial_end ? ` until ${day(s.trial_end)}` : ''}${s.cancel_at_period_end ? ', and it won\'t renew' : `, then $${PLUS.price} a month`}.`, manage:true};
+  if (s.status === 'trialing') return {label:`You're on your free trial of Plus${s.trial_end ? ` until ${day(s.trial_end)}` : ''}${s.cancel_at_period_end ? ', and it won\'t renew' : `, then ${onAnnual() ? `$${PLUS.annual} a year` : `$${PLUS.price} a month`}`}.`, manage:true};
   if (s.status === 'active') return {label:s.cancel_at_period_end ? `You're on Plus until ${day(s.current_period_end)}. It won't renew.` : `You're on Plus. Next bill ${day(s.current_period_end)}.`, manage:true};
   return {label:"You're on Free.", manage:false};
 }
-async function billing(action){
+async function billing(action, plan){
   if (!CLOUD.user){ toast('Sign in first'); return; }
   try {
-    const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action, return_url:location.href.split('#')[0]}});
+    const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action, plan, return_url:location.href.split('#')[0]}});
     if (error){
       const body = error.context && error.context.json ? await error.context.json().catch(() => ({})) : {};
       if (body.code === 'already_plus'){ toast(body.error); await loadPlan(); render(); return; } // the server refused a second subscription
@@ -123,7 +134,7 @@ async function billing(action){
       : "Couldn't open checkout. Please try again in a minute.");
   }
 }
-const cloudCheckout = () => billing('checkout');
+const cloudCheckout = plan => billing('checkout', plan);
 const cloudPortal = () => billing('portal');
 if (/[?&]plus=welcome/.test(location.search)){ // back from Stripe Checkout
   history.replaceState(null, '', location.pathname);

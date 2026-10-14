@@ -17,6 +17,8 @@ begin
     'active_week', (select count(*) from auth.users where last_sign_in_at > now() - interval '7 days'),
     'plans', (select coalesce(jsonb_object_agg(status, n), '{}'::jsonb) from (
       select coalesce(s.status, 'free') as status, count(*) as n from auth.users u left join public.subscriptions s on s.user_id = u.id group by 1) x),
+    'paying_prices', (select coalesce(jsonb_object_agg(coalesce(price_id, 'unknown'), n), '{}'::jsonb) from (
+      select price_id, count(*) as n from public.subscriptions where status = 'active' group by 1) x),
     'pieces', (select count(*) from public.items),
     'photos', (select count(*) from storage.objects where bucket_id = 'closet-photos'),
     'people', (select coalesce(jsonb_agg(p), '[]'::jsonb) from (

@@ -548,6 +548,7 @@ html[data-theme="rio"] .tab.on .count,html[data-theme="rio"] .tab .count{backgro
 .up-table td:not(:first-child),.up-table th:not(:first-child){text-align:center;width:28%}
 .up-table .plus{font-weight:700}
 .meter{height:6px;background:var(--line, #e5e5e5);border-radius:3px;overflow:hidden;margin:6px 0 2px}.meter i{display:block;height:100%;background:var(--ink)}
+.up-seg{margin-bottom:14px}
 .up-faq{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
 @media (max-width:760px){.up-hero{grid-template-columns:1fr}}
 .admin-stats{grid-template-columns:repeat(4,1fr);margin-top:10px}
@@ -990,7 +991,7 @@ async function finishSetup(btn){
 
 /* ---- Plans: Free and Maison Moi Plus ---- */
 const FREE = {items:15, restyles:2, theme:'lbd'};
-const PLUS = {price:5, trialDays:7};
+const PLUS = {price:5, annual:50, trialDays:7}; // fallbacks; loadPrices() replaces them with Stripe's current prices
 const realItems = () => S.items.filter(i => !i.demo).length;
 const themeOn = () => isPlus() || !S.theme ? (S.theme || 'lbd') : FREE.theme;
 const restylesLeft = () => isPlus() ? Infinity : FREE.restyles - (S.restyles && S.restyles.date === todayISO() ? S.restyles.n : 0);
@@ -1018,8 +1019,10 @@ function viewUpgrade(){
   const reason = {items:`Your Free closet holds ${FREE.items} pieces, and it's full. Plus makes room for everything you own.`,
     restyles:`You've used both of today's restyles. They reset tomorrow, or go unlimited with Plus.`,
     theme:`That theme is part of Plus. Free comes dressed in Little Black Dress.`}[why];
+  const yearly = UI.billPlan === 'annual', saving = Math.round(PLUS.price * 12 - PLUS.annual);
+  const then = yearly ? `$${PLUS.annual} a year` : `$${PLUS.price} a month`;
   const cta = plus ? (sub.manage ? '<button class="btn primary" data-action="manage-sub">Manage subscription</button>' : '')
-    : CLOUD.user ? `<button class="btn primary" data-action="start-trial">Start your ${PLUS.trialDays}-day free trial</button>`
+    : CLOUD.user ? `<button class="btn primary" data-action="start-trial" data-plan="${yearly ? 'annual' : 'monthly'}">Start your ${PLUS.trialDays}-day free trial</button>`
     : '<button class="btn primary" data-action="auth-signin">Sign in to start your free trial</button>';
   const rows = [['Closet pieces', FREE.items, 'Unlimited'], ['Outfit restyles', FREE.restyles + '/day', 'Unlimited'], ['Themes', 'Little Black Dress', `All ${Object.keys(THEMES).length}`],
     ['Daily outfit with your forecast', '✓', '✓'], ['Laundry, Resell and Library', '✓', '✓'], ['Sync across your devices', '✓', '✓']];
@@ -1027,16 +1030,20 @@ function viewUpgrade(){
   ${reason ? `<div class="banner"><span>✦ ${reason}</span></div>` : ''}
   <div class="card up-hero">
     <div><div class="up-eyebrow">Maison Moi Plus</div><h1 style="margin:8px 0 10px">Your whole closet, styled every single day.</h1>
-      <p class="muted">${plus ? sub.label : `Bring every piece you own, restyle as often as you like and dress the app in any theme. Try it free for ${PLUS.trialDays} days, then $${PLUS.price} a month. Cancel anytime.`}</p>
+      <p class="muted">${plus ? sub.label : `Bring every piece you own, restyle as often as you like and dress the app in any theme. Try it free for ${PLUS.trialDays} days, then ${then}. Cancel anytime.`}</p>
       <div class="actions" style="margin-top:16px">${cta}</div></div>
-    <div><div class="up-price">$${PLUS.price}<span> / month</span></div><p class="small muted" style="margin-top:8px">${PLUS.trialDays} days free · cancel anytime in two taps</p>
+    <div>${plus ? '' : `<div class="seg up-seg" role="tablist" aria-label="Billing">
+        <button role="tab" class="${yearly ? '' : 'on'}" aria-selected="${!yearly}" data-action="bill-plan" data-plan="monthly">Monthly</button>
+        <button role="tab" class="${yearly ? 'on' : ''}" aria-selected="${yearly}" data-action="bill-plan" data-plan="annual">Yearly${saving > 0 ? ` · save $${saving}` : ''}</button></div>`}
+      <div class="up-price">${yearly && !plus ? `$${PLUS.annual}<span> / year</span>` : `$${PLUS.price}<span> / month</span>`}</div>
+      <p class="small muted" style="margin-top:8px">${yearly && !plus ? `Works out to $${(PLUS.annual / 12).toFixed(2)} a month · ` : ''}${PLUS.trialDays} days free · cancel anytime in two taps</p>
       ${plus ? '' : `<div class="small" style="margin-top:16px">You're using <b>${Math.min(realItems(), FREE.items)} of ${FREE.items}</b> pieces</div><div class="meter"><i style="width:${Math.min(100, realItems() / FREE.items * 100)}%"></i></div>`}</div>
   </div>
   <div class="card up-card"><h2>Free vs Plus</h2>
     <table class="up-table"><thead><tr><th></th><th>Free</th><th>Plus</th></tr></thead>
     <tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="plus">${r[2]}</td></tr>`).join('')}</tbody></table></div>
   <div class="card up-card"><h2>Good to know</h2><div class="up-faq">
-    <div><b>What happens after the trial?</b><p class="small muted">You're billed $${PLUS.price} a month starting day ${PLUS.trialDays + 1}. We'll email you before the trial ends.</p></div>
+    <div><b>What happens after the trial?</b><p class="small muted">You're billed ${then} starting day ${PLUS.trialDays + 1}. We'll email you before the trial ends.</p></div>
     <div><b>What if I cancel?</b><p class="small muted">Nothing is deleted. Your pieces, photos and history stay put; you just can't add past ${FREE.items} pieces and the app goes back to Default.</p></div>
     <div><b>How do I pay?</b><p class="small muted">Securely through Stripe. Maison Moi never sees or stores your card. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p></div>
   </div></div>`;
@@ -1045,6 +1052,9 @@ function viewUpgrade(){
 /* ---- Admin: only shown to accounts in the admins table (the database refuses everyone else) ---- */
 function viewAdmin(){
   const a = CLOUD.admin, pl = a.plans || {}, n = k => pl[k] || 0, paying = n('active');
+  // Monthly revenue from each paying member's actual price (annual counts as a twelfth); unknown prices count as monthly.
+  const pr = CLOUD.prices || {}, monthlyOf = id => pr.annual && id === pr.annual.id ? PLUS.annual / 12 : PLUS.price;
+  const mrr = a.paying_prices ? Object.entries(a.paying_prices).reduce((t, [id, k]) => t + k * monthlyOf(id), 0) : paying * PLUS.price;
   const day = d => d ? new Date(d).toLocaleDateString([], {month:'short', day:'numeric', year:'numeric'}) : 'Never';
   const planName = {free:'Free', trialing:'Trial', active:'Plus', comped:'Founder', past_due:'Past due', canceled:'Canceled'};
   const stat = (v, l) => `<div><b>${v}</b><span class="small muted">${l}</span></div>`;
@@ -1052,7 +1062,7 @@ function viewAdmin(){
   <div class="page-head"><div><h1>Admin</h1><p class="muted">Only you can see this page. Updated ${new Date(CLOUD.adminAt).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})}.</p></div>
     <div class="actions"><button class="btn" data-action="admin-refresh">Refresh</button><a class="btn" href="https://supabase.com/dashboard/project/mkfiiqkbtqbjksdzzykv/auth/users" target="_blank" rel="noopener">Open Supabase</a></div></div>
   <div class="card up-card" style="margin-top:0"><h2>Members</h2>
-    <div class="pstats admin-stats">${stat(a.accounts, 'accounts')}${stat(a.new_week, 'new this week')}${stat(a.active_week, 'active this week')}${stat('$' + paying * PLUS.price, 'monthly revenue')}</div>
+    <div class="pstats admin-stats">${stat(a.accounts, 'accounts')}${stat(a.new_week, 'new this week')}${stat(a.active_week, 'active this week')}${stat('$' + Math.round(mrr).toLocaleString(), 'monthly revenue')}</div>
     <div class="pstats admin-stats">${stat(n('free'), 'on Free')}${stat(n('trialing'), 'in free trial')}${stat(paying, 'paying for Plus')}${stat(n('comped'), 'founder passes')}</div>
     <div class="pstats admin-stats">${stat(a.pieces, 'closet pieces saved')}${stat(a.photos, 'photos stored')}${stat(n('past_due') + n('canceled'), 'past due or canceled')}${stat(a.accounts ? Math.round(a.pieces / a.accounts) : 0, 'pieces per account')}</div></div>
   <div class="card up-card"><h2>Accounts</h2><p class="muted small sub">Newest first. Passwords are never visible, even to you.</p>
@@ -2259,7 +2269,8 @@ document.addEventListener('click', async e => {
     case 'auth-out': await cloudSignOut(); break;
     case 'delete-account': await cloudDeleteAccount(); break;
     case 'cloud-sync': await cloudPush(true); break;
-    case 'start-trial': el.disabled = true; await cloudCheckout(); el.disabled = false; break;
+    case 'start-trial': el.disabled = true; await cloudCheckout(el.dataset.plan); el.disabled = false; break;
+    case 'bill-plan': UI.billPlan = el.dataset.plan; render(); break;
     case 'admin-refresh': el.disabled = true; await loadAdmin(); render(); toast('Updated'); break;
     case 'manage-sub': el.disabled = true; await cloudPortal(); el.disabled = false; break;
     case 'save-links': {

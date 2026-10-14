@@ -1,4 +1,5 @@
 // Maison Moi billing: one Supabase Edge Function named "stripe" (deploy with "Verify JWT" turned off).
+//   POST {action:'prices'}                anyone -> each plan's current price ({monthly:{id,amount,interval}, annual:{...}}, amounts in cents)
 //   POST {action:'checkout', plan, return_url}  signed-in user -> Stripe Checkout link (plan 'monthly' or 'annual', 7-day trial the first time);
 //                                         refused with 409 if they already have Plus, so nobody pays twice
 //   POST {action:'portal', return_url}    signed-in user -> Stripe billing portal link (change card, cancel, invoices)
@@ -36,9 +37,10 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   try {
     if (req.headers.get('stripe-signature')) return await webhook(req);
+    const { action, plan, return_url } = await req.json().catch(() => ({}));
+    if (action === 'prices') return json(await prices());
     const { data: { user } } = await db.auth.getUser((req.headers.get('Authorization') || '').replace('Bearer ', ''));
     if (!user) return json({ error: 'Sign in first' }, 401);
-    const { action, plan, return_url } = await req.json().catch(() => ({}));
     const back = backTo(return_url);
     const { data: sub } = await db.from('subscriptions').select('status,stripe_customer_id,trial_end').eq('user_id', user.id).maybeSingle();
 
@@ -60,8 +62,7 @@ Deno.serve(async (req) => {
         customer = (await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } })).id;
         await db.from('subscriptions').upsert({ user_id: user.id, stripe_customer_id: customer, status: sub?.status || 'free', updated_at: new Date().toISOString() });
       }
-      const product = await stripe.products.retrieve(PRODUCTS[plan] || PRODUCTS.monthly);
-      const price = typeof product.default_price === 'string' ? product.default_price : product.default_price?.id;
+      const price = (await prices())[plan === 'annual' ? 'annual' : 'monthly']?.id;
       if (!price) return json({ error: 'That plan has no default price in Stripe' }, 500);
       const s = await stripe.checkout.sessions.create({
         mode: 'subscription', customer, client_reference_id: user.id,
@@ -97,6 +98,20 @@ Deno.serve(async (req) => {
     return json({ error: 'Something went wrong on our side. Please try again in a minute.' }, 500);
   }
 });
+
+// Each plan's default price, remembered for 10 minutes so the Upgrade page doesn't call Stripe on every visit.
+let priceCache: { at: number; data: Record<string, { id: string; amount: number; interval: string } | null> } | null = null;
+async function prices() {
+  if (priceCache && Date.now() - priceCache.at < 10 * 60e3) return priceCache.data;
+  const data: Record<string, { id: string; amount: number; interval: string } | null> = {};
+  for (const [plan, id] of Object.entries(PRODUCTS)) {
+    const product = await stripe.products.retrieve(id, { expand: ['default_price'] });
+    const p = product.default_price as any;
+    data[plan] = p?.id ? { id: p.id, amount: p.unit_amount, interval: p.recurring?.interval || '' } : null;
+  }
+  priceCache = { at: Date.now(), data };
+  return data;
+}
 
 async function webhook(req: Request) {
   const event = await stripe.webhooks.constructEventAsync(await req.text(), req.headers.get('stripe-signature')!,
