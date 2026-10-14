@@ -27,8 +27,12 @@ const cloudGate = () => cloudOn() && !CLOUD.user && !S.localOnly;          // sh
 const cloudImg = v => typeof v === 'string' && v.startsWith('sb:') ? (CLOUD.signed[v.slice(3)] || '') : v;
 const cloudWrite = () => { try { localStorage.setItem(LS_KEY, JSON.stringify(S)); } catch(e){} };
 const chunks = (a, n) => Array.from({length:Math.ceil(a.length / n)}, (_, i) => a.slice(i * n, i * n + n));
+// Payments switch. false: Maison Moi is free, everyone gets every feature, and nothing in the app asks for payment or shows prices.
+// true: the Free and Plus plans come back with Stripe Checkout. Anyone still subscribed can always reach Manage subscription to cancel.
+const PAYMENTS_ON = false;
 // Plus is on while Stripe says trialing or active ('comped' is a free pass set by hand). The webhook is the only writer of this table.
-const isPlus = () => !!(CLOUD.user || (!CLOUD.checked && S.cloudUser)) && ['trialing', 'active', 'comped'].includes((S.sub || {}).status);
+const isPlus = () => !PAYMENTS_ON || !!(CLOUD.user || (!CLOUD.checked && S.cloudUser)) && ['trialing', 'active', 'comped'].includes((S.sub || {}).status);
+const hasSub = () => ['trialing', 'active', 'past_due'].includes((S.sub || {}).status); // a Stripe subscription that can still bill
 const newRev = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 async function cloudStart(){
@@ -97,6 +101,7 @@ async function loadPlan(){
 }
 // Live prices from Stripe (through the billing function), so a price change in Stripe shows up here without a code change.
 async function loadPrices(){
+  if (!PAYMENTS_ON) return;
   try {
     const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action:'prices'}});
     if (error || !data) return;
@@ -335,12 +340,12 @@ function cloudForget(){
 // Deletes the account for good: Stripe customer (any subscription stops at once), photos, closet, then this browser's copies.
 async function cloudDeleteAccount(){
   if (!CLOUD.user) return;
-  const typed = prompt('This permanently deletes your Maison Moi account: your closet, photos and history. If you have Plus, it ends right away and you won\'t be charged again.\n\nType DELETE to confirm.');
+  const typed = prompt(`This permanently deletes your Maison Moi account: your closet, photos and history.${hasSub() ? ' Your Plus subscription ends right away and you won\'t be charged again.' : ''}\n\nType DELETE to confirm.`);
   if (typed === null) return;
   if (typed.trim().toUpperCase() !== 'DELETE') return toast('Nothing was deleted. Type DELETE to confirm.');
   toast('Deleting your account...');
   const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action:'delete_account'}});
-  if (error || !data || !data.deleted) return toast("Couldn't delete your account. Try again, or email jackie@maisonmoi.app.");
+  if (error || !data || !data.deleted) return toast("Couldn't delete your account. Try again, or email hello@maisonmoi.app.");
   clearTimeout(CLOUD.t); CLOUD.user = null;
   await CLOUD.db.auth.signOut({scope:'local'}).catch(() => {});
   cloudForget();
@@ -356,6 +361,9 @@ function cloudStatusText(){
 }
 
 function planTeaser(){
+  if (!PAYMENTS_ON) return `<div class="plan-teaser one"><div class="pt pt-plus"><div class="pt-name">Free</div><div class="pt-price">$0</div><div class="pt-note">Everything included</div>
+    <ul>${['Unlimited closet pieces', 'Unlimited outfit restyles', `All ${Object.keys(THEMES).length} themes`, 'Daily outfit with your forecast'].map(x => `<li>${x}</li>`).join('')}</ul></div></div>
+    <p class="pt-foot">Free for everyone. No card needed.</p>`;
   const plan = (cls, name, price, note, perks) => `<div class="pt ${cls}"><div class="pt-name">${name}</div><div class="pt-price">${price}</div><div class="pt-note">${note}</div>
     <ul>${perks.map(x => `<li>${x}</li>`).join('')}</ul></div>`;
   return `<div class="plan-teaser">
