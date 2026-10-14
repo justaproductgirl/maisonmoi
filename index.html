@@ -127,6 +127,9 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .tile{position:relative;background:var(--card);border-radius:10px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0)}
 .tile img{width:100%;height:100%;object-fit:contain;display:block;background:#f4f4f2}
 .tile .cap{position:absolute;left:0;right:0;bottom:0;padding:14px 6px 4px;font-size:10.5px;font-weight:600;color:var(--accent-ink);background:linear-gradient(transparent,rgba(0,0,0,.55));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .inset{position:absolute;top:6px;right:6px;width:34%;aspect-ratio:1;background:#f4f4f2;border:1.5px solid var(--card);box-shadow:0 1px 4px rgba(0,0,0,.18);cursor:pointer}
+.tile .inset img{width:100%;height:100%;object-fit:contain;display:block}
+.tile .inset span{position:absolute;left:0;right:0;bottom:0;font-size:8.5px;font-weight:700;text-align:center;color:var(--accent-ink);background:rgba(0,0,0,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile.blank{background:transparent;box-shadow:none;border:1.5px dashed rgba(0,0,0,.2)}
 .a-outer{grid-column:1;grid-row:1/3}.a-top{grid-column:2;grid-row:1}.a-bottom{grid-column:2;grid-row:2}
 .a-dress{grid-column:2;grid-row:1/3}.a-acc{grid-column:3;grid-row:1}.a-shoes{grid-column:3;grid-row:2}
@@ -1741,24 +1744,31 @@ function viewShop(){
 
 /* ---- Home (daily styling) ---- */
 function flatlay(parts){
+  // Supporting pieces (base layer under a knit, socks with shoes) sit as a small inset on their main tile.
+  const inset = (k, label) => {
+    const i = parts[k] && byId(parts[k]);
+    return i ? `<div class="inset" data-action="edit-item" data-id="${i.id}" title="${esc(label + ': ' + i.name)}"><img src="${esc(imgOf(i))}" referrerpolicy="no-referrer"><span>${esc(label)}</span></div>` : '';
+  };
   const slot = (k, cls) => {
     const i = parts[k] && byId(parts[k]);
-    return i ? `<div class="tile ${cls}" data-action="edit-item" data-id="${i.id}" title="${esc(i.name)}"><img src="${esc(imgOf(i))}" referrerpolicy="no-referrer"><div class="cap">${esc(i.name)}</div></div>` : (cls === 'a-dress' || cls === 'a-top' || cls === 'a-bottom' ? '' : `<div class="tile blank ${cls}"></div>`);
+    const extra = k === 'top' ? inset('base', 'Optional base') : k === 'shoes' ? inset('socks', 'Socks') : '';
+    return i ? `<div class="tile ${cls}" data-action="edit-item" data-id="${i.id}" title="${esc(i.name)}"><img src="${esc(imgOf(i))}" referrerpolicy="no-referrer"><div class="cap">${esc(i.name)}</div>${extra}</div>` : (cls === 'a-dress' || cls === 'a-top' || cls === 'a-bottom' ? '' : `<div class="tile blank ${cls}"></div>`);
   };
   return `<div class="flatlay ${parts.outer ? '' : 'no-outer'}">${parts.outer ? slot('outer', 'a-outer') : ''}${parts.dress ? slot('dress', 'a-dress') : slot('top', 'a-top') + slot('bottom', 'a-bottom')}${slot('acc', 'a-acc')}${slot('shoes', 'a-shoes')}</div>`;
 }
 function lookCard(o, idx, plan){
-  const ids = Object.values(o.parts);
+  const ids = Object.values(o.parts), opt = OPTIONAL_PARTS.map(k => o.parts[k]).filter(Boolean);
   const pct = clamp(Math.round(78 + o.score * 6), 45, 99);
-  const done = ids.filter(id => wornToday(id, plan.date));
+  const need = ids.filter(id => !opt.includes(id)), done = need.filter(id => wornToday(id, plan.date));
   return `<div class="card look">
     <div class="look-head"><div><div class="kicker">Look ${idx + 1}</div><h3>${esc(lookTitle(o))}</h3></div><span class="match">${pct}% match</span></div>
     ${flatlay(o.parts)}
     <ul class="why">${reasonsFor(o, plan.ctx).map(r => `<li class="${r.warn ? 'warn' : ''}">${esc(r.t)}</li>`).join('')}</ul>
     <div class="wear" data-look="${idx}">
-      <label class="all"><input type="checkbox" class="wear-all" ${done.length === ids.length ? 'checked disabled' : ''}> I wore this whole outfit</label>
+      <label class="all"><input type="checkbox" class="wear-all" ${done.length === need.length ? 'checked disabled' : ''}> I wore this whole outfit</label>
       <div class="wear-items">${ids.map(id => { const i = byId(id); if (!i) return ''; const d = wornToday(id, plan.date);
-        return `<label class="${d ? 'done' : ''}"><input type="checkbox" class="wear-one" value="${id}" ${d ? 'checked disabled' : ''}>${esc(i.name)}</label>`; }).join('')}</div>
+        const o2 = opt.includes(id);
+        return `<label class="${d ? 'done' : ''}"><input type="checkbox" class="wear-one${o2 ? ' wear-opt' : ''}" value="${id}" ${d ? 'checked disabled' : ''}>${esc(i.name)}${o2 ? ' <span class="muted">(optional)</span>' : ''}</label>`; }).join('')}</div>
       <div class="actions"><button class="btn dark sm" data-action="log-look" data-idx="${idx}">Save to wear log</button>
         <button class="btn ghost sm" data-action="nope" data-idx="${idx}">Not for me</button></div>
     </div></div>`;
@@ -2261,7 +2271,7 @@ document.addEventListener('change', async e => {
   if (t.id === 'no-trends'){ S.noTrends = t.checked; save(); render(); }
   if (t.id === 'on-feet'){ S.day.onFeet = t.checked; save(); }
   if (t.id === 'day-notes'){ S.day.notes = t.value; save(); }
-  if (t.classList.contains('wear-all')){ t.closest('.wear').querySelectorAll('.wear-one:not(:disabled)').forEach(c => c.checked = t.checked); }
+  if (t.classList.contains('wear-all')){ t.closest('.wear').querySelectorAll('.wear-one:not(:disabled):not(.wear-opt)').forEach(c => c.checked = t.checked); }
   if (t.dataset.change === 'status'){
     const it = byId(t.dataset.id); it.status = t.value; save(); render();
     toast(t.value === 'sold' ? 'Nice! Marked as sold and removed from outfit picks.' : t.value === 'listed' ? 'Marked as listed' : 'Keeping it');
