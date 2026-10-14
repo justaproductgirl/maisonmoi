@@ -269,6 +269,8 @@ body.setup main{max-width:none;padding:0}
 .loc-pill{font-size:13px;margin-top:6px;min-height:18px}
 .wx-card{display:flex;align-items:center;gap:12px;background:var(--soft);border-radius:12px;padding:10px 12px;margin-bottom:8px}
 .wx-card .t{font-family:var(--serif);font-size:22px;font-weight:600}
+.wx-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.linkish{background:none;border:0;padding:0;font-size:12.5px;color:var(--ink);text-decoration:underline;cursor:pointer;white-space:nowrap}
 .banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:14px;background:var(--accent);color:var(--accent-ink);border:0;margin-bottom:18px}
 .gap{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line)}
 .gap:last-child{border:0}
@@ -742,7 +744,13 @@ S.day.location = null; S.day.onFeet = false;
 S.day.moments = S.day.moments.filter(m => ['wfh','lounge','errands','dinner','date','workout'].includes(m));
 S.drafts = S.drafts || [];
 S.products = S.products || [];
-if (S.day.date !== todayISO() && !S._keepDate) { S.day.date = todayISO(); }
+// Plan for today, unless someone picked a future date. A picked date that has passed rolls back to today.
+function rollDay(){
+  const t = todayISO();
+  if (S.day.date === t || (S._keepDate && S.day.date > t)) return false;
+  S.day.date = t; S._keepDate = false; return true;
+}
+rollDay();
 const hasGoal = g => !!(S.profile && S.profile.goals.includes(g));
 
 /* ============ Location + weather (Zippopotam + Open-Meteo, both free, no key) ============ */
@@ -754,15 +762,45 @@ async function lookupZip(zip){
     return {zip, city:p['place name'], state:p['state abbreviation'], lat:+p.latitude, lon:+p.longitude};
   } catch(e){ return null; }
 }
-async function fetchWeather(force){
+// Forecast source: NOAA's National Blend of Models (what the National Weather Service forecasts from) for its
+// first ~11 days in the lower 48, then Open-Meteo's default blend for the rest and anywhere the NOAA blend doesn't cover.
+// The default blend alone ran up to 9°F off the NWS forecast in coastal cities (San Francisco, Los Angeles).
+const WX_SRC = 'nbm1', WX_MODELS = ['ncep_nbm_conus', 'best_match'];
+// Where the forecast is for: this device's location when "Use my location" is on, otherwise the profile zip.
+// Device location is rounded to about 1 km, kept on this device only (never synced) and sent only to Open-Meteo.
+function wxPlace(){
+  if (S.useHere && S.here) return {lat:S.here.lat, lon:S.here.lon, here:true};
   const p = S.profile;
-  if (!p || p.lat == null) return;
-  if (!force && S.weather && Date.now() - S.weather.at < 3 * 36e5) return;
+  return p && p.lat != null ? {lat:p.lat, lon:p.lon, here:false} : null;
+}
+function locate(){
+  return new Promise(res => {
+    if (!navigator.geolocation) return res('unsupported');
+    navigator.geolocation.getCurrentPosition(
+      pos => { S.here = {lat:Math.round(pos.coords.latitude * 100) / 100, lon:Math.round(pos.coords.longitude * 100) / 100, at:Date.now()}; res('ok'); },
+      err => res(err.code === 1 ? 'denied' : 'failed'),
+      {enableHighAccuracy:false, timeout:10000, maximumAge:30 * 6e4});
+  });
+}
+// Refresh the device location (no prompt: only runs once the person has turned it on) when it's over 30 minutes old.
+async function refreshHere(){
+  if (!S.useHere || (S.here && Date.now() - S.here.at < 30 * 6e4)) return;
+  try { const st = await navigator.permissions.query({name:'geolocation'}); if (st.state !== 'granted') return; } catch(e){ /* no Permissions API: the browser remembers the grant */ }
+  await locate();
+}
+async function fetchWeather(force){
+  const p = wxPlace();
+  if (!p) return;
+  const moved = !S.weather || S.weather.lat !== p.lat || S.weather.lon !== p.lon;
+  if (!force && !moved && S.weather.src === WX_SRC && Date.now() - S.weather.at < 36e5) return;
   try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=14`;
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=14&models=${WX_MODELS.join(',')}`;
     const d = (await (await fetch(u)).json()).daily, days = {};
-    d.time.forEach((t, i) => days[t] = {hi:Math.round(d.temperature_2m_max[i]), lo:Math.round(d.temperature_2m_min[i]), rain:d.precipitation_probability_max[i] ?? 0, code:d.weather_code[i]});
-    S.weather = {at:Date.now(), days};
+    // Fields come back per model (temperature_2m_max_ncep_nbm_conus) or plain when only one model answers.
+    const pick = (f, i) => { for (const m of WX_MODELS){ const v = (d[f + '_' + m] || [])[i]; if (v != null) return v; } return (d[f] || [])[i]; };
+    d.time.forEach((t, i) => { const hi = pick('temperature_2m_max', i), lo = pick('temperature_2m_min', i);
+      if (hi != null && lo != null) days[t] = {hi:Math.round(hi), lo:Math.round(lo), rain:pick('precipitation_probability_max', i) ?? 0, code:pick('weather_code', i) ?? 0}; });
+    S.weather = {at:Date.now(), src:WX_SRC, lat:p.lat, lon:p.lon, days};
     applyForecast(); save();
   } catch(e){ /* offline: keep manual weather */ }
 }
@@ -1802,9 +1840,10 @@ function viewToday(){
   const form = `<div class="card panel form">
     <h2>Plan my day</h2>
     <label class="lbl">Date</label><input type="date" class="input" id="day-date" value="${d.date}">
-    <label class="lbl">Weather${S.profile && S.profile.city ? ` in ${esc(S.profile.city)}` : ''}</label>
+    <div class="wx-head"><label class="lbl">Weather${S.useHere && S.here ? ' near you' : S.profile && S.profile.city ? ` in ${esc(S.profile.city)}` : ''}</label>
+      ${S.useHere && S.here ? (S.profile && S.profile.lat != null ? `<button class="linkish" data-action="use-zip">Use ${esc(S.profile.city || S.profile.zip || "my zip")}</button>` : '') : '<button class="linkish" data-action="use-here">📍 Use my location</button>'}</div>
     ${fc ? `<div class="wx-card"><span style="font-size:28px">${wxLabel(fc.code)[0]}</span><div><div class="t">${fc.hi}° / ${fc.lo}°</div><div class="small muted">${wxLabel(fc.code)[1]} · ${fc.rain}% rain · dressing for ${d.weather} weather</div></div></div>` :
-      `<div class="hint" style="margin:0">${S.profile && S.profile.lat != null ? 'No forecast for this date yet (it covers the next 14 days). Outfits assume mild weather.' : 'Add your zip in ⋯ > Edit profile to get your local forecast. Outfits assume mild weather for now.'}</div>`}
+      `<div class="hint" style="margin:0">${wxPlace() ? 'No forecast for this date yet (it covers the next 14 days). Outfits assume mild weather.' : 'Tap Use my location, or add your zip in ⋯ > Edit profile, to get your local forecast. Outfits assume mild weather for now.'}</div>`}
     <button class="notes-toggle ${UI.notesOpen ? 'open' : ''}" data-action="notes-toggle" aria-expanded="${!!UI.notesOpen}"><span>Tell me about your day</span><i class="knob"></i></button>
     <div class="notes-wrap ${UI.notesOpen ? 'open' : ''}"><div><textarea class="input" id="day-notes" placeholder="e.g. In the office till 4, presenting to leadership, then groceries and dinner with friends. Feet are sore, want comfy shoes.">${esc(d.notes)}</textarea></div></div>
     <label class="lbl">Your day</label>
@@ -2101,6 +2140,13 @@ document.addEventListener('click', async e => {
     case 'set-source': UI.formSource = el.dataset.v; el.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el)); break;
 
     case 'set-loc': S.day.location = el.dataset.v; save(); render(); break;
+    case 'use-here': {
+      el.disabled = true; el.textContent = 'Finding you...';
+      const r = await locate();
+      if (r !== 'ok'){ toast(r === 'denied' ? 'Location is blocked for this site. Allow it in your browser settings, or keep using your zip.' : "Couldn't get your location. Using your zip for now."); render(); break; }
+      S.useHere = true; await fetchWeather(true); applyForecast(); generatePlan(); save(); render(); toast('Forecast is now for where you are'); break;
+    }
+    case 'use-zip': { S.useHere = false; await fetchWeather(true); applyForecast(); generatePlan(); save(); render(); toast(`Forecast is back to ${S.profile.city || 'your zip'}`); break; }
     case 'notes-toggle': { UI.notesOpen = !UI.notesOpen; el.classList.toggle('open', UI.notesOpen); el.setAttribute('aria-expanded', UI.notesOpen);
       el.nextElementSibling.classList.toggle('open', UI.notesOpen); if (UI.notesOpen) setTimeout(() => $('#day-notes').focus(), 250); break; }
     case 'toggle-moment': { const m = el.dataset.v, arr = S.day.moments; S.day.moments = arr.includes(m) ? arr.filter(x => x !== m) : [...arr, m]; save(); render(); break; }
@@ -2353,8 +2399,19 @@ render();
 cloudStart();
 if (S.profile && S.profile.done){
   const before = S.weather && S.weather.at;
-  fetchWeather().then(() => { if (S.weather && S.weather.at !== before){ generatePlan(); render(); } });
+  refreshHere().then(() => fetchWeather()).then(() => { if (S.weather && S.weather.at !== before){ generatePlan(); render(); } });
 }
+// Coming back to an open tab or the home screen app: roll the date over and refresh a forecast older than an hour.
+// Looks are only rebuilt when the day or its weather actually changed, so they don't reshuffle under you.
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || !S.profile || !S.profile.done) return;
+  const was = S.day.weather, at = S.weather && S.weather.at, rolled = rollDay();
+  await refreshHere();
+  await fetchWeather();
+  applyForecast();
+  if (rolled || S.day.weather !== was || !S.plan || S.plan.date !== S.day.date){ generatePlan(); save(); render(); }
+  else if (S.tab === 'today' && S.weather && S.weather.at !== at) render();
+});
 </script>
 </body>
 </html>
