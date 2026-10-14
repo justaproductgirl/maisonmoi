@@ -248,9 +248,10 @@ async function captchaMount(){
 }
 // A token works once, so each attempt takes the current one and the widget fetches the next.
 // If Turnstile can't load (blocked or offline) this returns nothing and Supabase decides.
-async function captchaToken(){
+async function captchaToken(say){
   await captchaMount();
   if (!window.turnstile || CAPTCHA.id === null) return undefined;
+  if (!CAPTCHA.token && say) say('Tick "Verify you are human" above to continue.', true);
   const t = CAPTCHA.token || await new Promise(ok => { CAPTCHA.wait = ok; setTimeout(() => ok(CAPTCHA.token), 60e3); });
   CAPTCHA.wait = null; CAPTCHA.token = '';
   try { turnstile.reset(CAPTCHA.id); } catch(e){}
@@ -266,13 +267,13 @@ async function cloudAuth(kind){
   const redirect = /^https?:/.test(location.href) ? location.href.split('#')[0] : undefined;
   if (kind === 'reset'){
     say('Sending...', true);
-    const {error} = await CLOUD.db.auth.resetPasswordForEmail(email, {redirectTo:redirect, captchaToken:await captchaToken()});
+    const {error} = await CLOUD.db.auth.resetPasswordForEmail(email, {redirectTo:redirect, captchaToken:await captchaToken(say)});
     if (error && /captcha/i.test(error.message)) return say(BOT_MSG);
     return say(error ? error.message : 'Check your email for a link to reset your password.', !error);
   }
   if (pass.length < 8) return say('Passwords need at least 8 characters.');
   say(kind === 'up' ? 'Creating your account...' : 'Signing in...', true);
-  const token = await captchaToken();
+  const token = await captchaToken(say);
   const {data, error} = kind === 'up'
     ? await CLOUD.db.auth.signUp({email, password:pass, options:{emailRedirectTo:redirect, captchaToken:token}})
     : await CLOUD.db.auth.signInWithPassword({email, password:pass, options:{captchaToken:token}});
