@@ -1,14 +1,16 @@
 // Maison Moi billing: one Supabase Edge Function named "stripe" (deploy with "Verify JWT" turned off).
-//   POST {action:'checkout', return_url}  signed-in user -> Stripe Checkout link ($8/mo, 7-day trial the first time)
+//   POST {action:'checkout', plan, return_url}  signed-in user -> Stripe Checkout link (plan 'monthly' or 'annual', 7-day trial the first time)
 //   POST {action:'portal', return_url}    signed-in user -> Stripe billing portal link (change card, cancel, invoices)
 //   POST from Stripe (stripe-signature)   webhook -> keeps public.subscriptions in step with Stripe
-// Secrets (Supabase > Edge Functions > Secrets): STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_WEBHOOK_SECRET.
+// Secrets (Supabase > Edge Functions > Secrets): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET.
+// Each plan uses its Stripe product's default price, so changing a price in Stripe needs no code change.
 import Stripe from 'npm:stripe@17';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, { httpClient: Stripe.createFetchHttpClient() });
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const TRIAL_DAYS = 7;
+const PRODUCTS: Record<string, string> = { monthly: 'prod_VR8JTjDKiDATKq', annual: 'prod_VR8Jn1vupu8T2r' };
 const HOME = 'https://maisonmoi.app/';
 const RETURN_OK = ['https://maisonmoi.app', 'https://www.maisonmoi.app', 'https://justaproductgirl.github.io'];
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
@@ -26,7 +28,7 @@ Deno.serve(async (req) => {
     if (req.headers.get('stripe-signature')) return await webhook(req);
     const { data: { user } } = await db.auth.getUser((req.headers.get('Authorization') || '').replace('Bearer ', ''));
     if (!user) return json({ error: 'Sign in first' }, 401);
-    const { action, return_url } = await req.json().catch(() => ({}));
+    const { action, plan, return_url } = await req.json().catch(() => ({}));
     const back = backTo(return_url);
     const { data: sub } = await db.from('subscriptions').select('status,stripe_customer_id,trial_end').eq('user_id', user.id).maybeSingle();
 
@@ -41,9 +43,12 @@ Deno.serve(async (req) => {
         customer = (await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } })).id;
         await db.from('subscriptions').upsert({ user_id: user.id, stripe_customer_id: customer, status: sub?.status || 'free', updated_at: new Date().toISOString() });
       }
+      const product = await stripe.products.retrieve(PRODUCTS[plan] || PRODUCTS.monthly);
+      const price = typeof product.default_price === 'string' ? product.default_price : product.default_price?.id;
+      if (!price) return json({ error: 'That plan has no default price in Stripe' }, 500);
       const s = await stripe.checkout.sessions.create({
         mode: 'subscription', customer, client_reference_id: user.id,
-        line_items: [{ price: Deno.env.get('STRIPE_PRICE_ID')!, quantity: 1 }],
+        line_items: [{ price, quantity: 1 }],
         subscription_data: { metadata: { user_id: user.id }, ...(sub?.trial_end ? {} : { trial_period_days: TRIAL_DAYS }) }, // one free trial per account
         allow_promotion_codes: true,
         success_url: back + '?plus=welcome', cancel_url: back,
