@@ -739,7 +739,13 @@ S.day.location = null; S.day.onFeet = false;
 S.day.moments = S.day.moments.filter(m => ['wfh','lounge','errands','dinner','date','workout'].includes(m));
 S.drafts = S.drafts || [];
 S.products = S.products || [];
-if (S.day.date !== todayISO() && !S._keepDate) { S.day.date = todayISO(); }
+// Plan for today, unless someone picked a future date. A picked date that has passed rolls back to today.
+function rollDay(){
+  const t = todayISO();
+  if (S.day.date === t || (S._keepDate && S.day.date > t)) return false;
+  S.day.date = t; S._keepDate = false; return true;
+}
+rollDay();
 const hasGoal = g => !!(S.profile && S.profile.goals.includes(g));
 
 /* ============ Location + weather (Zippopotam + Open-Meteo, both free, no key) ============ */
@@ -751,15 +757,22 @@ async function lookupZip(zip){
     return {zip, city:p['place name'], state:p['state abbreviation'], lat:+p.latitude, lon:+p.longitude};
   } catch(e){ return null; }
 }
+// Forecast source: NOAA's National Blend of Models (what the National Weather Service forecasts from) for its
+// first ~11 days in the lower 48, then Open-Meteo's default blend for the rest and anywhere the NOAA blend doesn't cover.
+// The default blend alone ran up to 9°F off the NWS forecast in coastal cities (San Francisco, Los Angeles).
+const WX_SRC = 'nbm1', WX_MODELS = ['ncep_nbm_conus', 'best_match'];
 async function fetchWeather(force){
   const p = S.profile;
   if (!p || p.lat == null) return;
-  if (!force && S.weather && Date.now() - S.weather.at < 3 * 36e5) return;
+  if (!force && S.weather && S.weather.src === WX_SRC && Date.now() - S.weather.at < 36e5) return;
   try {
-    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=14`;
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&timezone=auto&forecast_days=14&models=${WX_MODELS.join(',')}`;
     const d = (await (await fetch(u)).json()).daily, days = {};
-    d.time.forEach((t, i) => days[t] = {hi:Math.round(d.temperature_2m_max[i]), lo:Math.round(d.temperature_2m_min[i]), rain:d.precipitation_probability_max[i] ?? 0, code:d.weather_code[i]});
-    S.weather = {at:Date.now(), days};
+    // Fields come back per model (temperature_2m_max_ncep_nbm_conus) or plain when only one model answers.
+    const pick = (f, i) => { for (const m of WX_MODELS){ const v = (d[f + '_' + m] || [])[i]; if (v != null) return v; } return (d[f] || [])[i]; };
+    d.time.forEach((t, i) => { const hi = pick('temperature_2m_max', i), lo = pick('temperature_2m_min', i);
+      if (hi != null && lo != null) days[t] = {hi:Math.round(hi), lo:Math.round(lo), rain:pick('precipitation_probability_max', i) ?? 0, code:pick('weather_code', i) ?? 0}; });
+    S.weather = {at:Date.now(), src:WX_SRC, days};
     applyForecast(); save();
   } catch(e){ /* offline: keep manual weather */ }
 }
@@ -2345,6 +2358,16 @@ if (S.profile && S.profile.done){
   const before = S.weather && S.weather.at;
   fetchWeather().then(() => { if (S.weather && S.weather.at !== before){ generatePlan(); render(); } });
 }
+// Coming back to an open tab or the home screen app: roll the date over and refresh a forecast older than an hour.
+// Looks are only rebuilt when the day or its weather actually changed, so they don't reshuffle under you.
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || !S.profile || !S.profile.done) return;
+  const was = S.day.weather, at = S.weather && S.weather.at, rolled = rollDay();
+  await fetchWeather();
+  applyForecast();
+  if (rolled || S.day.weather !== was || !S.plan || S.plan.date !== S.day.date){ generatePlan(); save(); render(); }
+  else if (S.tab === 'today' && S.weather && S.weather.at !== at) render();
+});
 </script>
 </body>
 </html>
