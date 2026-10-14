@@ -6,9 +6,9 @@
 // Publishable keys are safe in public code: row level security guards the data.
 const ENVS = {
   production: {url:'https://mkfiiqkbtqbjksdzzykv.supabase.co', key:'sb_publishable_kcy8Iqb5nZk7s1Gb13ZsWA_CCqKgFdM'},
-  sandbox:    {url:'', key:''}, // filled in once the sandbox Supabase project exists
+  sandbox:    {url:'https://tbzlysqumxvqljjxmegu.supabase.co', key:'sb_publishable_zu6P3-rwrp-pXjE11jMVow_rV9hHg-h'},
 };
-const ENV = /^(www\.)?maisonmoi\.app$/.test(location.hostname) || !ENVS.sandbox.url ? 'production' : 'sandbox';
+const ENV = /^(www\.)?maisonmoi\.app$/.test(location.hostname) ? 'production' : 'sandbox';
 const CLOUD_URL = ENVS[ENV].url, CLOUD_KEY = ENVS[ENV].key;
 if (ENV === 'sandbox') addEventListener('DOMContentLoaded', () => document.body.insertAdjacentHTML('beforeend',
   '<div style="position:fixed;left:10px;bottom:10px;z-index:9999;background:#ffd400;color:#000;font:700 11px/1 monospace;letter-spacing:1px;padding:7px 9px;border:1.5px solid #000;pointer-events:none">SANDBOX · TEST DATA</div>'));
