@@ -1,5 +1,6 @@
 // Maison Moi billing: one Supabase Edge Function named "stripe" (deploy with "Verify JWT" turned off).
-//   POST {action:'checkout', plan, return_url}  signed-in user -> Stripe Checkout link (plan 'monthly' or 'annual', 7-day trial the first time)
+//   POST {action:'checkout', plan, return_url}  signed-in user -> Stripe Checkout link (plan 'monthly' or 'annual', 7-day trial the first time);
+//                                         refused with 409 if they already have Plus, so nobody pays twice
 //   POST {action:'portal', return_url}    signed-in user -> Stripe billing portal link (change card, cancel, invoices)
 //   POST {action:'delete_account'}        signed-in user -> deletes their Stripe customer (ending any subscription at once), photos and account
 //   POST from Stripe (stripe-signature)   webhook -> keeps public.subscriptions in step with Stripe
@@ -21,6 +22,8 @@ const PRODUCTS: Record<string, string> = { monthly: env('STRIPE_PRODUCT_MONTHLY'
 const HOME = env('SITE_URL') || 'https://maisonmoi.app/';
 const RETURN_OK = ['https://maisonmoi.app', 'https://www.maisonmoi.app', 'https://justaproductgirl.github.io', 'https://sandbox.maisonmoi.app', 'http://localhost:8000'];
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' };
+const LIVE = ['trialing', 'active', 'past_due', 'comped'];                 // our statuses that mean "already has Plus"
+const STRIPE_LIVE = ['trialing', 'active', 'past_due', 'unpaid', 'paused']; // Stripe statuses that can still bill or resume
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
 // Only send people back to Maison Moi itself (Stripe needs an https address, so the Mac's file:// copy goes to the live site).
@@ -45,7 +48,14 @@ Deno.serve(async (req) => {
       return json({ url: s.url });
     }
     if (action === 'checkout') {
+      const already = { error: 'You already have Maison Moi Plus. Use Manage subscription to change your plan.', code: 'already_plus' };
+      if (LIVE.includes(sub?.status || '')) return json(already, 409);
       let customer = sub?.stripe_customer_id;
+      if (customer) { // our table can lag behind Stripe (a webhook still on its way), so ask Stripe too
+        const open = await stripe.subscriptions.list({ customer, status: 'all', limit: 20 });
+        const live = open.data.find((x) => STRIPE_LIVE.includes(x.status));
+        if (live) { await save(live, user.id); return json(already, 409); }
+      }
       if (!customer) {
         customer = (await stripe.customers.create({ email: user.email, metadata: { user_id: user.id } })).id;
         await db.from('subscriptions').upsert({ user_id: user.id, stripe_customer_id: customer, status: sub?.status || 'free', updated_at: new Date().toISOString() });
@@ -92,8 +102,14 @@ async function webhook(req: Request) {
   const event = await stripe.webhooks.constructEventAsync(await req.text(), req.headers.get('stripe-signature')!,
     env('STRIPE_WEBHOOK_SECRET'), undefined, Stripe.createSubtleCryptoProvider());
   const o = event.data.object as any;
-  if (event.type === 'checkout.session.completed' && o.subscription) await save(await stripe.subscriptions.retrieve(o.subscription), o.client_reference_id);
-  if (event.type.startsWith('customer.subscription.')) await save(o);
+  // Stripe doesn't promise to deliver events in order, so never trust the copy inside the event: fetch the subscription's
+  // state right now. A late "created" event then can't undo a newer "active", and replays are harmless.
+  const id = event.type === 'checkout.session.completed' ? o.subscription : event.type.startsWith('customer.subscription.') ? o.id : null;
+  if (!id) return json({ received: true });
+  let sub;
+  try { sub = await stripe.subscriptions.retrieve(id); }
+  catch (e) { if ((e as any)?.code !== 'resource_missing' || o.object !== 'subscription') throw e; sub = o; } // gone with a deleted customer
+  await save(sub, o.client_reference_id || o.metadata?.user_id);
   return json({ received: true });
 }
 
@@ -106,8 +122,10 @@ async function save(sub: any, userId?: string | null) {
   let uid = userId || sub.metadata?.user_id;
   if (!uid) uid = (await db.from('subscriptions').select('user_id').eq('stripe_customer_id', customer).maybeSingle()).data?.user_id;
   if (!uid) return console.error('No Maison Moi account for Stripe customer', customer);
-  const { data: now } = await db.from('subscriptions').select('status').eq('user_id', uid).maybeSingle();
+  const { data: now } = await db.from('subscriptions').select('status,stripe_subscription_id').eq('user_id', uid).maybeSingle();
   if (now?.status === 'comped') return; // founder passes are never overwritten by Stripe
+  // Someone with two subscriptions (an old canceled one and a new one): news about the old one must not end the new one.
+  if (now?.stripe_subscription_id && now.stripe_subscription_id !== sub.id && LIVE.includes(now.status) && !STRIPE_LIVE.includes(sub.status)) return;
   const item = sub.items?.data?.[0];
   const { error } = await db.from('subscriptions').upsert({
     user_id: uid, status: STATUS[sub.status] || 'free', stripe_customer_id: customer, stripe_subscription_id: sub.id,

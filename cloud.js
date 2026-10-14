@@ -110,7 +110,12 @@ async function billing(action){
   if (!CLOUD.user){ toast('Sign in first'); return; }
   try {
     const {data, error} = await CLOUD.db.functions.invoke('stripe', {body:{action, return_url:location.href.split('#')[0]}});
-    if (error || !data || !data.url) throw error || new Error('no url');
+    if (error){
+      const body = error.context && error.context.json ? await error.context.json().catch(() => ({})) : {};
+      if (body.code === 'already_plus'){ toast(body.error); await loadPlan(); render(); return; } // the server refused a second subscription
+      throw new Error(body.error || 'billing');
+    }
+    if (!data || !data.url) throw new Error('no url');
     location.href = data.url;
   } catch(e){
     toast(!navigator.onLine ? "You're offline. Connect to the internet and try again."
