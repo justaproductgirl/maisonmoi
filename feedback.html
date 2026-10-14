@@ -65,7 +65,7 @@ const signedOut = () => box.innerHTML = `<p>Please sign in to send feedback, so 
 function form(user){
   box.innerHTML = `<form id="f">
     <label for="cat">What kind of feedback?</label>
-    <select id="cat"><option value="idea">An idea or request</option><option value="bug">Something isn't working</option><option value="love">Something I love</option><option value="other">Something else</option></select>
+    <select id="cat"><option value="idea">I have an idea!</option><option value="bug">Something isn't working</option><option value="love">I love this!</option><option value="other">Something else...</option></select>
     <label for="m">Your feedback</label>
     <textarea id="m" maxlength="4000" required placeholder="Tell us what's on your mind"></textarea>
     <div class="small">Sending as ${esc(user.email || 'your account')}.</div>
