@@ -88,13 +88,60 @@ function colorPenalty(a, b, prof){
   if (a.color === b.color) return .2;
   return (prof.colorful || 0) > .5 ? .4 : 1.5;
 }
+/* ---- Item kinds ----
+   Categories are broad (a sweater and a tee are both "top"), so outfit rules read the kind from the name.
+   An item can set `kind` by hand to override the guess. */
+const KIND_RULES = {
+  top:[['cardigan', /\bcardigan\b/i], ['sweater', /\b(sweater|jumper|pullover|knit)\b/i], ['sweatshirt', /\b(sweatshirt|hoodie|crewneck)\b/i]],
+  shoes:[['open', /\b(sandals?|slides?|flip.?flops?|thongs?|espadrilles?|mules?|slingbacks?|peep.?toe)\b/i], ['tall', /\b(knee.?high|over.?the.?knee|thigh.?high|tall boots?)\b/i],
+    ['heel', /\b(pumps?|heels?|stilettos?)\b/i], ['sneaker', /\b(sneakers?|trainers?|runners?|running|tennis|high.?tops?|xt-\d+)\b/i],
+    ['flat', /\b(flats?|ballet|ballerinas?|mary janes?|moccasins?|loafers?)\b/i], ['clog', /\bclogs?\b/i], ['boot', /\bboots?\b/i]],
+  accessory:[['sock', /\bsocks?\b/i], ['hat', /\b(hat|cap|beanie|beret|visor|bucket)\b/i]]
+};
+function kindOf(i){
+  if (i.kind) return i.kind;
+  const hit = (KIND_RULES[i.category] || []).find(([, re]) => re.test(i.name));
+  if (hit) return hit[0];
+  if (i.category === 'shoes' && i.tags.some(t => t === 'sporty' || t === 'athleisure')) return 'sneaker';
+  return i.category === 'top' ? 'base' : 'other';
+}
+const isHat = i => kindOf(i) === 'hat';
+const isSock = i => kindOf(i) === 'sock';
+const isKnit = i => ['sweater', 'cardigan'].includes(kindOf(i));
+
+/* ---- Socks ----
+   Socks are their own slot, picked after the shoes. Never with open shoes, heels or tall boots.
+   Athletic socks go with sneakers, boots and clogs; dressy ones (ruffle, lace) also suit flats and Mary Janes. */
+const DRESSY_SOCK = /\b(ruffle|lace|sheer|frill|pointelle|glitter)/i;
+const SOCK_SHOES = {athletic:['sneaker', 'boot', 'clog', 'other'], dressy:['sneaker', 'boot', 'clog', 'flat']};
+function socksFit(sock, shoes){
+  return SOCK_SHOES[DRESSY_SOCK.test(sock.name) ? 'dressy' : 'athletic'].includes(kindOf(shoes));
+}
+
+/* ---- Base layers ----
+   Every sweater and cardigan gets an optional base layer underneath. Good layers are plain and close-fitting;
+   a sleeveless knit wants sleeves (a shirt or long sleeve) under it. */
+const BAD_BASE = /\b(crop|bandeau|halter|bell.?sleeve|ruffle|oversized|tunic|rugby|blouse|bra)/i;
+function baseScore(it, knit, ctx, prof, opts){
+  if (kindOf(it) !== 'base' || BAD_BASE.test(it.name)) return -Infinity;
+  let s = scoreItem(it, ctx, prof, opts) - colorPenalty(knit, it, prof);
+  if (it.tags.some(t => t === 'minimalist' || t === 'classic')) s += .5;
+  if (/\bgraphic\b/i.test(it.name) && kindOf(knit) === 'sweater') s -= .8;
+  if (/\b(sleeveless|vest)\b/i.test(knit.name)) s += /\b(shirt|button|long.?sleeve|turtleneck|roll.?neck)\b/i.test(it.name) && !/\bt-shirt\b/i.test(it.name) ? 1.2 : -1;
+  return s;
+}
+function bestBase(knit, ctx, prof, opts){
+  let b = null, bs = -Infinity;
+  S.items.filter(i => i.category === 'top' && i.id !== knit.id).forEach(i => { const s = baseScore(i, knit, ctx, prof, opts); if (s > bs){ bs = s; b = i; } });
+  return b ? {item:b, score:bs} : null;
+}
+
 // Hats only make sense when the day has you outside for a while.
 const OUTDOOR_MOMENTS = ['errands','workout','travel'];
-const isHat = i => /\b(hat|cap|beanie|beret|visor|bucket)\b/i.test(i.name);
-function best(cat, ctx, prof, opts, against = []){
+function best(cat, ctx, prof, opts, against = [], ok = () => true){
   let b = null, bs = -Infinity;
   const outdoors = ctx.moments.some(m => OUTDOOR_MOMENTS.includes(m));
-  S.items.filter(i => i.category === cat && (outdoors || !isHat(i))).forEach(i => {
+  S.items.filter(i => i.category === cat && (outdoors || !isHat(i)) && ok(i)).forEach(i => {
     let s = scoreItem(i, ctx, prof, opts);
     against.forEach(a => s -= colorPenalty(a, i, prof));
     if (s > bs){ bs = s; b = i; }
@@ -117,11 +164,26 @@ function compose(ctx, prof, opts = {}){
     const outer = best('outerwear', ctx, prof, opts, main);
     if (outer && (cold || ctx.rain >= 50 || (ctx.f >= 3.5 && outer.score > -2))) parts.outer = outer;
   }
-  const acc = best('accessory', ctx, prof, opts);
+  const acc = best('accessory', ctx, prof, opts, [], i => !isSock(i));
   if (acc && acc.score > -1.5) parts.acc = acc;
-  const scores = Object.values(parts).map(p => p.score);
+  // Sneakers always get socks (athletic ones), other closed shoes get them when it's cold or wet.
+  // Dressy socks are an accent: only with flats, Mary Janes or clogs, never on warm days or dressy occasions.
+  if (shoes){
+    const sk = kindOf(shoes.item), wet = cold || ctx.rain >= 50;
+    const accent = ['flat', 'clog'].includes(sk) && !warm && ctx.f <= 3.5;
+    const fits = i => isSock(i) && socksFit(i, shoes.item) && (DRESSY_SOCK.test(i.name) ? accent || (wet && sk !== 'sneaker') : true);
+    const sock = best('accessory', ctx, prof, opts, [], fits);
+    const dressy = sock && DRESSY_SOCK.test(sock.item.name);
+    if (sock && (sk === 'sneaker' || wet || (dressy && sock.score > -.5))) parts.socks = sock;
+  }
+  // Optional base layer under a knit.
+  if (parts.top && isKnit(parts.top.item)){ const base = bestBase(parts.top.item, ctx, prof, opts); if (base) parts.base = base; }
+  // Socks and the optional base layer support the look; they don't move its match score.
+  const scores = Object.entries(parts).filter(([k]) => !SUPPORT_PARTS.includes(k)).map(([, p]) => p.score);
   return {parts:Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v.item.id])), score:scores.reduce((a, b) => a + b, 0) / scores.length};
 }
+const SUPPORT_PARTS = ['socks', 'base'];
+const OPTIONAL_PARTS = ['base'];
 function generatePlan(){
   const prof = styleProfile();
   const moments = dayMoments(S.day);
@@ -148,12 +210,14 @@ function generatePlan(){
 }
 function reasonsFor(o, ctx){
   const prof = styleProfile();
-  const items = Object.entries(o.parts).map(([k, id]) => [k, byId(id)]).filter(([, i]) => i);
+  const items = Object.entries(o.parts).filter(([k]) => !SUPPORT_PARTS.includes(k)).map(([k, id]) => [k, byId(id)]).filter(([, i]) => i);
   const r = [];
   const vibe = {};
   items.forEach(([, i]) => i.tags.forEach(t => { if (prof[t] > 0) vibe[t] = (vibe[t] || 0) + prof[t]; }));
   const topVibes = Object.entries(vibe).sort((a, b) => b[1] - a[1]).slice(0, 2).map(x => x[0]);
   if (topVibes.length) r.push({t:`Matches your Pinterest vibe: ${topVibes.join(' + ')}`});
+  const base = o.parts.base && byId(o.parts.base), knit = o.parts.top && byId(o.parts.top);
+  if (base && knit) r.push({t:`Optional: the ${base.name.toLowerCase()} under the ${knit.name.toLowerCase()}`});
   const fAvg = items.filter(([k]) => k !== 'acc').reduce((s, [, i]) => s + i.formality, 0) / Math.max(1, items.filter(([k]) => k !== 'acc').length);
   const labels = ctx.moments.map(m => MOMENTS[m].label.toLowerCase());
   if (Math.abs(fAvg - ctx.f) <= 0.9) r.push({t:`Right level of polish for ${labels.slice(0, 3).join(', ')}`});
